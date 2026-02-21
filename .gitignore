@@ -6,6 +6,9 @@ env/
 # Database
 dsa_data.db
 
+# Local solutions & feedback
+problems/
+
 # IDEs
 .idea/
 .vscode/
