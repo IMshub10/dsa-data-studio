@@ -1,10 +1,16 @@
-# 🧑‍💻 DSA Data Studio
+# DSA Data Studio
 
 DSA Data Studio is a local CLI tool and web dashboard designed to help you track your LeetCode problem-solving progress. It allows you to save incremental solutions, log performance metadata in a SQLite database, and get automated code reviews and optimal solutions from your LLM of choice.
 
+
+## How does the UI look
+<img width="2558" height="1357" alt="image" src="https://github.com/user-attachments/assets/c6e4c9ef-f981-4e36-a57b-3cab44007e88" />
+<img width="2481" height="1283" alt="image" src="https://github.com/user-attachments/assets/c346fad5-5574-48dc-bd24-63adbde8f5bd" />
+
+
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 1. **Activate the Environment**
    Open your terminal in the project root and activate the Python virtual environment:
@@ -82,7 +88,7 @@ Completely removes the problem directory from your disk and safely deletes all a
 
 ---
 
-## 📁 Project Worktree
+## Project Worktree
 
 ```text
 dsa-data-studio/
