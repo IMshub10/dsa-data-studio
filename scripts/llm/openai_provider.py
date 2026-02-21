@@ -40,20 +40,43 @@ class OpenAIProvider(LLMProvider):
         print(f"Sending request to OpenAI ({self.model_name})...")
         
         try:
-            # Reasoning and Codex models handle system messages and temperature differently
-            kwargs = {}
-            if self.supports_temperature:
-                kwargs["temperature"] = 0.2
+            # Route models that specifically require the new responses endpoint (codex, pro, or any gpt-5 that isn't a standard chat model)
+            if "codex" in self.model_name or "pro" in self.model_name or ("gpt-5" in self.model_name and "chat" not in self.model_name):
+                prompt = f"INSTRUCTIONS:\n{system_prompt}\n\nINPUT:\n{user_prompt}"
+                res = self.client.responses.create(
+                    model=self.model_name,
+                    input=prompt
+                )
                 
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                **kwargs
-            )
-            return response.choices[0].message.content
+                final_text = ""
+                for item in res.output:
+                    if item.type == "message":
+                        for content_part in item.content:
+                            if content_part.type == "output_text":
+                                final_text += content_part.text
+                return final_text.strip()
+            
+            else:
+                # Reasoning and standard models use chat completions
+                kwargs = {}
+                if self.supports_temperature:
+                    kwargs["temperature"] = 0.2
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                else:
+                    # o1-mini and similar models historically reject the 'system' role
+                    messages = [
+                        {"role": "user", "content": f"INSTRUCTIONS:\n{system_prompt}\n\nINPUT:\n{user_prompt}"}
+                    ]
+                    
+                response = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=messages,
+                    **kwargs
+                )
+                return response.choices[0].message.content
             
         except Exception as e:
             print(f"Error calling OpenAI API: {e}")

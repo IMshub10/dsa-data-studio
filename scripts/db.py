@@ -118,15 +118,21 @@ def add_feedback(solution_id: int, feedback_path: str):
         )
 
 def update_problem_metadata(problem_id: int, metadata: dict):
-    # Filter out empty or None values to only update provided fields
-    valid_fields = ["topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
+    # Only update provided valid fields
+    valid_fields = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
     updates = []
     values = []
 
     for key, val in metadata.items():
-        if key in valid_fields and val is not None and str(val).strip() != "":
+        if key in valid_fields:
+            # Handle float/NaN or None
+            if val is None or (isinstance(val, float) and val != val):  # val != val is a safe NaN check
+                clean_val = ""
+            else:
+                clean_val = str(val).strip()
+                
             updates.append(f"{key} = ?")
-            values.append(val)
+            values.append(clean_val)
 
     if not updates:
         return

@@ -3,6 +3,11 @@ import shutil
 import sqlite3
 from datetime import datetime
 import typer
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from db import init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, add_feedback, update_problem_metadata, delete_problem_from_db
 from llm.factory import get_llm_provider
 from utils import sanitize_name
@@ -67,10 +72,8 @@ def submit(problem_name: str, solution_file: str):
     dest_path = os.path.join(problem_dir, "solutions", dest_filename)
     
     shutil.copy2(solution_file, dest_path)
-    # Store relative path for portability
-    rel_path = os.path.join("problems", safe_name, "solutions", dest_filename)
-    
-    solution_id = add_solution(problem["id"], rel_path, language)
+    # Store only the filename; the app will construct the path dynamically based on current problem name
+    solution_id = add_solution(problem["id"], dest_filename, language)
     typer.echo(f"Successfully submitted solution: {dest_path}")
     typer.echo(f"Logged to DB with Solution ID: {solution_id}")
 
@@ -98,7 +101,11 @@ def review(problem_name: str):
     with open(prob_file, "r", encoding="utf-8") as f:
         problem_statement = f.read()
         
-    sol_path = os.path.join(BASE_DIR, latest_sol["file_path"])
+    raw_path = latest_sol["file_path"]
+    if "/" in raw_path:
+        sol_path = os.path.join(BASE_DIR, raw_path)
+    else:
+        sol_path = os.path.join(problem_dir, "solutions", raw_path)
     with open(sol_path, "r", encoding="utf-8") as f:
         solution_code = f.read()
         
@@ -117,8 +124,8 @@ def review(problem_name: str):
     with open(fb_path, "w", encoding="utf-8") as f:
         f.write(feedback)
         
-    rel_fb_path = os.path.join("problems", safe_name, "feedback", fb_filename)
-    add_feedback(latest_sol["id"], rel_fb_path)
+    # Store only the filename; path is constructed dynamically
+    add_feedback(latest_sol["id"], fb_filename)
     
     typer.echo(f"Review successfully generated and saved to {fb_path}")
 

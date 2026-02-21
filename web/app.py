@@ -18,7 +18,122 @@ DB_PATH = os.path.join(BASE_DIR, "dsa_data.db")
 
 PAGE_SIZE = 20
 
+# Predefined DSA categories
+DSA_TOPICS = [
+    "Arrays", "Strings", "Linked List", "Stack", "Queue", "Hash Table",
+    "Trees", "Binary Search", "Graphs", "Dynamic Programming", "Greedy",
+    "Backtracking", "Bit Manipulation", "Math", "Sorting", "Heap",
+    "Trie", "Union Find", "Sliding Window", "Recursion", "Matrix",
+    "Intervals", "Design", "Simulation",
+]
+
+DSA_PATTERNS = [
+    "Two Pointers", "Sliding Window", "Fast & Slow Pointers",
+    "Merge Intervals", "Cyclic Sort", "In-place Reversal",
+    "BFS", "DFS", "Binary Search", "Top K Elements",
+    "K-way Merge", "Knapsack", "Topological Sort",
+    "Monotonic Stack", "Kadane's Algorithm", "Prefix Sum",
+    "Divide and Conquer", "Bit Masking", "Floyd's Cycle",
+    "Reservoir Sampling", "Bucket Sort",
+]
+
 st.set_page_config(page_title="DSA Data Studio", layout="wide")
+
+# --- Custom Styling ---
+
+st.markdown("""
+<style>
+    /* Import clean font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    /* Global font */
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Headers — weight only, no hardcoded colors */
+    h1 {
+        font-weight: 700 !important;
+        letter-spacing: -0.5px !important;
+    }
+    h2, h4 {
+        font-weight: 600 !important;
+    }
+
+    /* ── Light mode ── */
+    @media (prefers-color-scheme: light) {
+        span[data-baseweb="tag"] {
+            background-color: #E8EAF6 !important;
+            color: #283593 !important;
+            border: 1px solid #C5CAE9 !important;
+        }
+        span[data-baseweb="tag"] span[role="presentation"] {
+            color: #5C6BC0 !important;
+        }
+        [data-testid="stDataEditor"] {
+            border: 1px solid #E0E0E0;
+        }
+        hr { border-color: #ECEFF1 !important; }
+        .subtitle { color: #78909C; }
+    }
+
+    /* ── Dark mode ── */
+    @media (prefers-color-scheme: dark) {
+        span[data-baseweb="tag"] {
+            background-color: rgba(129, 140, 248, 0.15) !important;
+            color: #A5B4FC !important;
+            border: 1px solid rgba(129, 140, 248, 0.3) !important;
+        }
+        span[data-baseweb="tag"] span[role="presentation"] {
+            color: #818CF8 !important;
+        }
+        [data-testid="stDataEditor"] {
+            border: 1px solid #374151;
+        }
+        hr { border-color: #374151 !important; }
+        .subtitle { color: #9CA3AF; }
+        .stButton > button:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+        }
+    }
+
+    /* ── Shared (both modes) ── */
+    span[data-baseweb="tag"] {
+        border-radius: 16px !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        padding: 2px 10px !important;
+    }
+
+    [data-testid="stDataEditor"] {
+        border-radius: 8px;
+    }
+
+    .stButton > button {
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
+    }
+    .stButton > button:hover {
+        transform: translateY(-1px) !important;
+    }
+
+    [data-baseweb="select"] {
+        border-radius: 8px !important;
+    }
+
+    .streamlit-expanderHeader {
+        font-weight: 500 !important;
+        font-size: 15px !important;
+    }
+
+    .subtitle {
+        font-size: 16px;
+        margin-top: -10px;
+        margin-bottom: 24px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # --- Helper DB functions for detail view ---
 
@@ -41,8 +156,9 @@ def load_feedback(solution_id):
 
 # --- Page title ---
 
-st.title("🧑‍💻 DSA Data Studio")
-st.markdown("Track your LeetCode problem solving progress and view LLM optimizations.")
+st.title("DSA Data Studio")
+st.markdown('<p class="subtitle">Track your LeetCode problem solving progress and view LLM optimizations.</p>', unsafe_allow_html=True)
+
 
 # --- Problem Log with pagination ---
 
@@ -66,15 +182,15 @@ else:
     problems_df = pd.DataFrame(page_rows)
 
     # Editable table
-    display_cols = ["id", "name", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
-    editable_cols = ["topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
+    display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
+    editable_cols = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
 
     # Keep a snapshot of the original data for diffing
     original_df = problems_df[display_cols].copy()
 
     column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True),
-        "name": st.column_config.TextColumn("Name", disabled=True),
+        "link": st.column_config.TextColumn("Link"),
     }
 
     edited_df = st.data_editor(
@@ -103,12 +219,34 @@ else:
                     if old_val != new_val:
                         st.markdown(f"- `{col}`: ~~{old_val or '(empty)'}~~ → **{new_val or '(empty)'}**")
 
-        if st.button("Save Changes", type="primary"):
-            for _, row in changed_rows.iterrows():
-                metadata = {col: row[col] for col in editable_cols}
-                update_problem_metadata(int(row["id"]), metadata)
-            st.success(f"Saved {len(changed_rows)} row(s) to database!")
-            st.rerun()
+        btn_col1, btn_col2, _ = st.columns([1, 1, 10], gap="small")
+        with btn_col1:
+            if st.button("Save Changes", type="primary"):
+                for _, row in changed_rows.iterrows():
+                    orig_row = original_df[original_df["id"] == row["id"]].iloc[0]
+                    metadata = {col: row[col] for col in editable_cols}
+                    
+                    # If name was changed, rename the local directory
+                    # The DB only stores bare filenames for solutions/feedback now, so we don't need to bulk update child paths!
+                    if row["name"] != orig_row["name"]:
+                        old_slug = sanitize_name(orig_row["name"])
+                        new_slug = sanitize_name(row["name"])
+                        old_path = os.path.join(BASE_DIR, "problems", old_slug)
+                        new_path = os.path.join(BASE_DIR, "problems", new_slug)
+                        if os.path.exists(old_path) and not os.path.exists(new_path):
+                            os.rename(old_path, new_path)
+                            
+                    print(f"DEBUG SAVING ID {row['id']}: {metadata}")
+                    update_problem_metadata(int(row["id"]), metadata)
+                st.success(f"Saved {len(changed_rows)} row(s) to database!")
+                if "problem_editor" in st.session_state:
+                    del st.session_state["problem_editor"]
+                st.rerun()
+        with btn_col2:
+            if st.button("Discard"):
+                if "problem_editor" in st.session_state:
+                    del st.session_state["problem_editor"]
+                st.rerun()
 
     # Pagination controls
     col_prev, col_info, col_next = st.columns([1, 3, 1])
@@ -148,6 +286,53 @@ else:
         if prof_row["link"]:
             st.markdown(f"**Link:** [Problem URL]({prof_row['link']})")
 
+        # --- Topic & Pattern multi-select tagging ---
+        st.markdown("#### Tags")
+        tag_col1, tag_col2 = st.columns(2)
+
+        # Parse existing comma-separated values into lists
+        current_topics = [t.strip() for t in str(prof_row.get("topic") or "").split(",") if t.strip()]
+        current_patterns = [p.strip() for p in str(prof_row.get("pattern") or "").split(",") if p.strip()]
+
+        with tag_col1:
+            selected_topics = st.multiselect(
+                "Topics",
+                options=sorted(set(DSA_TOPICS + current_topics)),
+                default=current_topics,
+                key=f"topics_{prob_id}"
+            )
+        with tag_col2:
+            selected_patterns = st.multiselect(
+                "Patterns",
+                options=sorted(set(DSA_PATTERNS + current_patterns)),
+                default=current_patterns,
+                key=f"patterns_{prob_id}"
+            )
+
+        # Check if tags changed
+        new_topic_str = ", ".join(selected_topics)
+        new_pattern_str = ", ".join(selected_patterns)
+        old_topic_str = ", ".join(current_topics)
+        old_pattern_str = ", ".join(current_patterns)
+
+        if new_topic_str != old_topic_str or new_pattern_str != old_pattern_str:
+            tag_btn1, tag_btn2, _ = st.columns([1, 1, 10], gap="small")
+            with tag_btn1:
+                if st.button("Save Tags", type="primary", key=f"save_tags_{prob_id}"):
+                    update_problem_metadata(int(prob_id), {
+                        "topic": new_topic_str,
+                        "pattern": new_pattern_str
+                    })
+                    st.success("Tags saved!")
+                    st.rerun()
+            with tag_btn2:
+                if st.button("Discard", key=f"discard_tags_{prob_id}"):
+                    if f"topics_{prob_id}" in st.session_state:
+                        del st.session_state[f"topics_{prob_id}"]
+                    if f"patterns_{prob_id}" in st.session_state:
+                        del st.session_state[f"patterns_{prob_id}"]
+                    st.rerun()
+
         prob_file_path = os.path.join(BASE_DIR, "problems", sanitize_name(prof_row["name"]), "problem.md")
         if os.path.exists(prob_file_path):
             with st.expander("📝 Problem Statement", expanded=False):
@@ -165,7 +350,17 @@ else:
 
             with col1:
                 st.markdown(f"**Latest Submission:** {latest_sol['submitted_at']} ({latest_sol['language']})")
-                sol_path = os.path.join(BASE_DIR, latest_sol["file_path"])
+                
+                # Dynamically construct path using the current problem name slug
+                current_slug = sanitize_name(prof_row["name"])
+                
+                # Backwards compatible: if the DB still has old absolute paths, just use them.
+                # If it's just a filename (the new way), prepend the directories.
+                if "/" in latest_sol["file_path"]:
+                    sol_path = os.path.join(BASE_DIR, latest_sol["file_path"])
+                else:
+                    sol_path = os.path.join(BASE_DIR, "problems", current_slug, "solutions", latest_sol["file_path"])
+                    
                 if os.path.exists(sol_path):
                     with open(sol_path, "r", encoding="utf-8") as f:
                         code = f.read()
@@ -177,7 +372,12 @@ else:
                 st.markdown("**LLM Feedback**")
                 feedback_df = load_feedback(sol_id)
                 if not feedback_df.empty:
-                    fb_path = os.path.join(BASE_DIR, feedback_df.iloc[0]["feedback_path"])
+                    fb_raw_path = feedback_df.iloc[0]["feedback_path"]
+                    if "/" in fb_raw_path:
+                        fb_path = os.path.join(BASE_DIR, fb_raw_path)
+                    else:
+                        fb_path = os.path.join(BASE_DIR, "problems", current_slug, "feedback", fb_raw_path)
+                        
                     if os.path.exists(fb_path):
                         with open(fb_path, "r", encoding="utf-8") as f:
                             content = f.read().strip()
