@@ -11,7 +11,7 @@ if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 
 from utils import sanitize_name
-from db import get_problems_count, get_problems_page
+from db import get_problems_count, get_problems_page, update_problem_metadata
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "dsa_data.db")
@@ -65,15 +65,50 @@ else:
     page_rows = get_problems_page(st.session_state.current_page, PAGE_SIZE)
     problems_df = pd.DataFrame(page_rows)
 
-    # Table
+    # Editable table
     display_cols = ["id", "name", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
-    
-    # Increase font size for better readability
-    if not problems_df.empty:
-        styled_df = problems_df[display_cols].style.set_properties(**{'font-size': '16px'})
-        st.dataframe(styled_df, use_container_width=True, height=400)
-    else:
-        st.dataframe(problems_df[display_cols], use_container_width=True, height=400)
+    editable_cols = ["topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
+
+    # Keep a snapshot of the original data for diffing
+    original_df = problems_df[display_cols].copy()
+
+    column_config = {
+        "id": st.column_config.NumberColumn("ID", disabled=True),
+        "name": st.column_config.TextColumn("Name", disabled=True),
+    }
+
+    edited_df = st.data_editor(
+        problems_df[display_cols],
+        column_config=column_config,
+        use_container_width=True,
+        height=400,
+        num_rows="fixed",
+        key="problem_editor"
+    )
+
+    # Detect changes
+    changed_mask = (edited_df[editable_cols].fillna("") != original_df[editable_cols].fillna("")).any(axis=1)
+    changed_rows = edited_df[changed_mask]
+
+    if not changed_rows.empty:
+        st.warning(f"You have unsaved changes in **{len(changed_rows)} row(s)**.")
+
+        with st.expander("Preview changes", expanded=True):
+            for _, row in changed_rows.iterrows():
+                orig = original_df[original_df["id"] == row["id"]].iloc[0]
+                st.markdown(f"**{row['name']}**")
+                for col in editable_cols:
+                    old_val = str(orig[col]) if pd.notna(orig[col]) else ""
+                    new_val = str(row[col]) if pd.notna(row[col]) else ""
+                    if old_val != new_val:
+                        st.markdown(f"- `{col}`: ~~{old_val or '(empty)'}~~ → **{new_val or '(empty)'}**")
+
+        if st.button("Save Changes", type="primary"):
+            for _, row in changed_rows.iterrows():
+                metadata = {col: row[col] for col in editable_cols}
+                update_problem_metadata(int(row["id"]), metadata)
+            st.success(f"Saved {len(changed_rows)} row(s) to database!")
+            st.rerun()
 
     # Pagination controls
     col_prev, col_info, col_next = st.columns([1, 3, 1])
