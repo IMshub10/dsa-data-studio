@@ -63,7 +63,7 @@ st.markdown("""
     }
     h2, h3, h4 {
         font-weight: 600 !important;
-        color: #FFFFFF !important;
+        color: var(--text-color) !important;
     }
 
     /* Subtitle text */
@@ -71,19 +71,20 @@ st.markdown("""
         font-size: 18px;
         margin-top: -5px;
         margin-bottom: 30px;
-        color: #A0AEC0;
+        color: var(--text-color);
+        opacity: 0.7;
         font-weight: 300;
     }
 
     /* Metrics Styling */
     [data-testid="stMetricValue"] {
-        color: #00E5FF !important;
+        color: var(--primary-color) !important;
         font-weight: 700 !important;
         font-size: 2.8rem !important;
-        text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
     }
     [data-testid="stMetricLabel"] {
-        color: #A0AEC0 !important;
+        color: var(--text-color) !important;
+        opacity: 0.7;
         font-size: 1rem !important;
         font-weight: 500 !important;
         text-transform: uppercase;
@@ -93,26 +94,23 @@ st.markdown("""
     /* Glassmorphism Data Editor container */
     [data-testid="stDataEditor"] {
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        background: rgba(25, 25, 25, 0.6) !important;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+        border: 1px solid var(--secondary-background-color) !important;
+        background: transparent !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
     }
 
     /* Tags styling */
     span[data-baseweb="tag"] {
-        background: linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(0, 229, 255, 0.15)) !important;
-        color: #00E5FF !important;
-        border: 1px solid rgba(0, 229, 255, 0.2) !important;
+        background: var(--secondary-background-color) !important;
+        color: var(--text-color) !important;
+        border: 1px solid var(--primary-color) !important;
         border-radius: 12px !important;
         font-size: 12px !important;
         font-weight: 600 !important;
         padding: 4px 12px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     span[data-baseweb="tag"] span[role="presentation"] {
-        color: #8A2BE2 !important;
+        color: var(--primary-color) !important;
     }
 
     /* Buttons */
@@ -122,14 +120,14 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.5px;
         transition: all 0.3s ease !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        background-color: rgba(40, 40, 40, 0.8) !important;
-        color: white !important;
+        border: 1px solid var(--secondary-background-color) !important;
+        background-color: var(--secondary-background-color) !important;
+        color: var(--text-color) !important;
     }
     .stButton > button:hover {
         transform: translateY(-2px) !important;
-        border-color: #00E5FF !important;
-        box-shadow: 0 4px 15px rgba(0, 229, 255, 0.15) !important;
+        border-color: var(--primary-color) !important;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1) !important;
     }
     
     /* Primary buttons */
@@ -139,7 +137,7 @@ st.markdown("""
         border: none !important;
     }
     .stButton > button[kind="primary"]:hover {
-        box-shadow: 0 6px 20px rgba(0, 229, 255, 0.4) !important;
+        opacity: 0.9;
         transform: translateY(-2px) !important;
     }
 
@@ -147,33 +145,32 @@ st.markdown("""
     .streamlit-expanderHeader {
         font-weight: 600 !important;
         font-size: 16px !important;
-        background: rgba(255, 255, 255, 0.05) !important;
+        background: transparent !important;
         border-radius: 8px !important;
         transition: background 0.2s ease;
     }
     .streamlit-expanderHeader:hover {
-        background: rgba(255, 255, 255, 0.1) !important;
+        background: var(--secondary-background-color) !important;
     }
     [data-testid="stExpander"] {
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid var(--secondary-background-color) !important;
         border-radius: 8px !important;
-        background: rgba(20, 20, 20, 0.4) !important;
-        backdrop-filter: blur(5px);
+        background: transparent !important;
     }
 
     /* Dividers */
     hr { 
-        border-color: rgba(255, 255, 255, 0.08) !important; 
+        border-color: var(--secondary-background-color) !important; 
         margin-top: 2rem !important;
         margin-bottom: 2rem !important;
     }
     
     /* Chart Area */
     [data-testid="stChart"] {
-        background: rgba(20, 20, 20, 0.4) !important;
+        background: transparent !important;
         border-radius: 12px;
         padding: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--secondary-background-color);
     }
 </style>
 """, unsafe_allow_html=True)

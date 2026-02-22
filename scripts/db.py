@@ -52,6 +52,35 @@ def init_db():
     )
     ''')
 
+    # Create API usage logs table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS api_usage_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        problem_id INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL,
+        output_tokens INTEGER NOT NULL,
+        estimated_cost_usd REAL NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (problem_id) REFERENCES problems (id) ON DELETE CASCADE
+    )
+    ''')
+
+    # Add L4 tracking columns to existing problems table gracefully
+    new_columns = [
+        "time_complexity TEXT",
+        "space_complexity TEXT",
+        "l4_code_quality TEXT",
+        "l4_edge_cases TEXT",
+        "l4_scalability TEXT"
+    ]
+    for col in new_columns:
+        try:
+            cursor.execute(f"ALTER TABLE problems ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+
     conn.commit()
     conn.close()
     print("Database initialized successfully.")
@@ -119,7 +148,10 @@ def add_feedback(solution_id: int, feedback_path: str):
 
 def update_problem_metadata(problem_id: int, metadata: dict):
     # Only update provided valid fields
-    valid_fields = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
+    valid_fields = [
+        "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status",
+        "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability"
+    ]
     updates = []
     values = []
 
@@ -153,6 +185,17 @@ def delete_problem_from_db(problem_id: int):
         cursor.execute("DELETE FROM solutions WHERE problem_id = ?", (problem_id,))
         # Delete parent problem
         cursor.execute("DELETE FROM problems WHERE id = ?", (problem_id,))
+
+def add_api_usage(problem_id: int, provider: str, model_name: str, input_tokens: int, output_tokens: int, estimated_cost_usd: float) -> int:
+    """Logs an API call and its cost for a specific problem."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO api_usage_logs (problem_id, provider, model_name, input_tokens, output_tokens, estimated_cost_usd)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (problem_id, provider, model_name, input_tokens, output_tokens, estimated_cost_usd))
+        return cursor.lastrowid
+
 
 if __name__ == "__main__":
     init_db()

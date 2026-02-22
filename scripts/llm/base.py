@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
 
 # Shared prompts for rigorous Google L4/L5 interview standards
 SYSTEM_PROMPT = """You are an elite Staff Software Engineer at Google conducting a rigorous L4/L5 coding interview.
@@ -33,8 +34,9 @@ class LLMProvider(ABC):
     """
     
     @abstractmethod
-    def generate_review(self, problem_statement: str, solution_code: str, language: str) -> str:
+    def generate_review(self, problem_statement: str, solution_code: str, language: str) -> Tuple[str, int, int]:
         """
-        Sends the problem and solution to the LLM and returns the Markdown code review.
+        Sends the problem and solution to the LLM and returns:
+        (markdown_review_text, input_tokens, output_tokens)
         """
         pass

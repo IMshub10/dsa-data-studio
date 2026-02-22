@@ -6,9 +6,11 @@ import typer
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_path = os.path.join(BASE_DIR, ".env")
+load_dotenv(dotenv_path=env_path, override=True)
 
-from db import init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, add_feedback, update_problem_metadata, delete_problem_from_db
+from db import init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, add_feedback, update_problem_metadata, delete_problem_from_db, add_api_usage
 from llm.factory import get_llm_provider
 from utils import sanitize_name
 
@@ -112,7 +114,32 @@ def review(problem_name: str):
     typer.echo("Requesting review from LLM...")
     try:
         provider = get_llm_provider()
-        feedback = provider.generate_review(problem_statement, solution_code, latest_sol["language"])
+        feedback, in_tokens, out_tokens = provider.generate_review(problem_statement, solution_code, latest_sol["language"])
+        
+        # Calculate estimated cost based on common model pricing (Per 1M tokens)
+        model_name = getattr(provider, "model_name", "unknown")
+        provider_name = provider.__class__.__name__
+        cost = 0.0
+        
+        if "gpt-4o-mini" in model_name:
+            cost = (in_tokens / 1_000_000) * 0.150 + (out_tokens / 1_000_000) * 0.600
+        elif "gpt-4o" in model_name:
+            cost = (in_tokens / 1_000_000) * 2.50 + (out_tokens / 1_000_000) * 10.00
+        elif "o1-mini" in model_name:
+            cost = (in_tokens / 1_000_000) * 3.00 + (out_tokens / 1_000_000) * 12.00
+        elif "o3-mini" in model_name:
+            cost = (in_tokens / 1_000_000) * 1.10 + (out_tokens / 1_000_000) * 4.40
+        elif "sonnet" in model_name:
+            cost = (in_tokens / 1_000_000) * 3.00 + (out_tokens / 1_000_000) * 15.00
+        elif "haiku" in model_name:
+            cost = (in_tokens / 1_000_000) * 0.80 + (out_tokens / 1_000_000) * 4.00
+        elif "opus" in model_name:
+            cost = (in_tokens / 1_000_000) * 15.00 + (out_tokens / 1_000_000) * 75.00
+        else:
+            cost = 0.0 # Default fallback
+            
+        add_api_usage(problem["id"], provider_name, model_name, in_tokens, out_tokens, cost)
+            
     except Exception as e:
         typer.echo(f"Failed to get review: {e}")
         return
@@ -128,6 +155,8 @@ def review(problem_name: str):
     add_feedback(latest_sol["id"], fb_filename)
     
     typer.echo(f"Review successfully generated and saved to {fb_path}")
+    typer.echo(f"  Tokens usage: {in_tokens} input, {out_tokens} output")
+    typer.echo(f"  Estimated cost: ${cost:.5f}")
 
 @app.command()
 def log(problem_name: str):

@@ -2,6 +2,8 @@ import os
 from openai import OpenAI
 from .base import LLMProvider, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 
+from typing import Tuple
+
 class OpenAIProvider(LLMProvider):
     def __init__(self):
         self.api_key = os.environ.get("OPENAI_API_KEY")
@@ -12,7 +14,7 @@ class OpenAIProvider(LLMProvider):
         # Explicit config: set OPENAI_SUPPORTS_TEMPERATURE=false for reasoning/codex models (o1, o3, codex, etc.)
         self.supports_temperature = os.environ.get("OPENAI_SUPPORTS_TEMPERATURE", "true").strip().lower() == "true"
 
-    def generate_review(self, problem_statement: str, solution_code: str, language: str) -> str:
+    def generate_review(self, problem_statement: str, solution_code: str, language: str) -> Tuple[str, int, int]:
         system_prompt = SYSTEM_PROMPT
         user_prompt = USER_PROMPT_TEMPLATE.format(
             problem_statement=problem_statement,
@@ -31,13 +33,17 @@ class OpenAIProvider(LLMProvider):
                     input=prompt
                 )
                 
+                
                 final_text = ""
                 for item in res.output:
                     if item.type == "message":
                         for content_part in item.content:
                             if content_part.type == "output_text":
                                 final_text += content_part.text
-                return final_text.strip()
+                
+                in_tokens = res.usage.input_tokens if res.usage else 0
+                out_tokens = res.usage.output_tokens if res.usage else 0
+                return final_text.strip(), in_tokens, out_tokens
             
             else:
                 # Reasoning and standard models use chat completions
@@ -59,7 +65,9 @@ class OpenAIProvider(LLMProvider):
                     messages=messages,
                     **kwargs
                 )
-                return response.choices[0].message.content
+                in_tokens = response.usage.prompt_tokens if response.usage else 0
+                out_tokens = response.usage.completion_tokens if response.usage else 0
+                return response.choices[0].message.content, in_tokens, out_tokens
             
         except Exception as e:
             print(f"Error calling OpenAI API: {e}")
