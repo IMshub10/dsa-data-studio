@@ -101,7 +101,7 @@ st.markdown("""
 
     /* Tags styling */
     span[data-baseweb="tag"] {
-        background: transparent !important;
+        background: rgba(128, 128, 128, 0.15) !important;
         color: var(--text-color) !important;
         border: 1px solid rgba(150, 150, 150, 0.4) !important;
         border-radius: 12px !important;
