@@ -154,11 +154,40 @@ def load_feedback(solution_id):
             conn, params=(int(solution_id),)
         )
 
+def load_api_usage(problem_id):
+    with get_connection() as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM api_usage_logs WHERE problem_id = ? ORDER BY created_at DESC",
+            conn, params=(int(problem_id),)
+        )
+
+def load_analytics():
+    """Returns a tuple of (total_cost, df_daily_problems) for the dashboard header."""
+    with get_connection() as conn:
+        # Total Cost
+        cost_df = pd.read_sql_query("SELECT SUM(estimated_cost_usd) as total FROM api_usage_logs", conn)
+        total_cost = cost_df.iloc[0]["total"] if not pd.isna(cost_df.iloc[0]["total"]) else 0.0
+        
+        # Problems Solved per Day (Last 14 days)
+        daily_df = pd.read_sql_query("""
+            SELECT date(created_at) as solved_date, COUNT(*) as count 
+            FROM problems 
+            WHERE created_at >= date('now', '-14 days')
+            GROUP BY date(created_at)
+            ORDER BY solved_date ASC
+        """, conn)
+        
+        # Ensure 'solved_date' is a proper datetime or str that Streamlit charts can use as index
+        if not daily_df.empty:
+            daily_df["solved_date"] = pd.to_datetime(daily_df["solved_date"])
+            daily_df.set_index("solved_date", inplace=True)
+            
+        return total_cost, daily_df
+
 # --- Page title ---
 
 st.title("DSA Data Studio")
 st.markdown('<p class="subtitle">Track your LeetCode problem solving progress and view LLM optimizations.</p>', unsafe_allow_html=True)
-
 
 # --- Problem Log with pagination ---
 
@@ -386,9 +415,33 @@ else:
                             if content.endswith("```"):
                                 content = content[:-3]
                             st.markdown(content.strip())
+                            
+                        # Show API Usage if available
+                        usage_df = load_api_usage(prob_id)
+                        if not usage_df.empty:
+                            latest_usage = usage_df.iloc[0]
+                            st.caption(f"🤖 **Model:** `{latest_usage['model_name']}`  |  "
+                                       f"🪙 **Tokens:** {latest_usage['input_tokens']:,} in, {latest_usage['output_tokens']:,} out  |  "
+                                       f"💳 **Cost:** ${latest_usage['estimated_cost_usd']:.5f}")
                     else:
                         st.error("Feedback file not found.")
                 else:
                     st.info("No LLM feedback generated yet for this solution. Run `dsa review`.")
         else:
             st.info("No solutions submitted yet for this problem.")
+
+st.divider()
+
+# --- Analytics Header ---
+st.header("📈 Analytics")
+total_cost, daily_df = load_analytics()
+
+col1, col2 = st.columns([1, 4])
+with col1:
+    st.metric(label="Total LLM Review Cost (All Time)", value=f"${total_cost:.4f}")
+    
+with col2:
+    if not daily_df.empty:
+        st.line_chart(daily_df, y="count", height=150, x_label="Date", y_label="Problems Solved")
+    else:
+        st.info("Solve a problem to see your activity chart!")
