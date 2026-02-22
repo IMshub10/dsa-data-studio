@@ -120,8 +120,8 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.5px;
         transition: all 0.3s ease !important;
-        border: 1px solid var(--secondary-background-color) !important;
-        background-color: var(--secondary-background-color) !important;
+        border: 1px solid rgba(150, 150, 150, 0.4) !important;
+        background-color: transparent !important;
         color: var(--text-color) !important;
     }
     .stButton > button:hover {
