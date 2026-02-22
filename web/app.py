@@ -101,16 +101,17 @@ st.markdown("""
 
     /* Tags styling */
     span[data-baseweb="tag"] {
-        background: var(--secondary-background-color) !important;
+        background: transparent !important;
         color: var(--text-color) !important;
-        border: 1px solid var(--primary-color) !important;
+        border: 1px solid rgba(150, 150, 150, 0.4) !important;
         border-radius: 12px !important;
         font-size: 12px !important;
         font-weight: 600 !important;
         padding: 4px 12px !important;
     }
     span[data-baseweb="tag"] span[role="presentation"] {
-        color: var(--primary-color) !important;
+        color: var(--text-color) !important;
+        opacity: 0.7;
     }
 
     /* Buttons */
