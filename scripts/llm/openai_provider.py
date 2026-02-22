@@ -1,6 +1,6 @@
 import os
 from openai import OpenAI
-from .base import LLMProvider
+from .base import LLMProvider, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 
 class OpenAIProvider(LLMProvider):
     def __init__(self):
@@ -13,29 +13,12 @@ class OpenAIProvider(LLMProvider):
         self.supports_temperature = os.environ.get("OPENAI_SUPPORTS_TEMPERATURE", "true").strip().lower() == "true"
 
     def generate_review(self, problem_statement: str, solution_code: str, language: str) -> str:
-        system_prompt = """
-        You are an expert Data Structures and Algorithms software engineer conducting a code review.
-        Your goal is to provide concise, direct feedback on the provided solution to a coding problem.
-        Focus on:
-        1. Time and Space Complexity Analysis (O-notation).
-        2. Any bugs, edge cases not handled, or performance bottlenecks.
-        3. The optimal approach (if this solution isn't already optimal) and how to improve it.
-        4. Provide the code for the optimal approach if applicable.
-        
-        Format your output strictly in Markdown. Keep it structured and easy to read.
-        """
-        
-        user_prompt = f"""
-        Here is the problem statement:
-        {problem_statement}
-        
-        Here is my solution ({language}):
-        ```{language}
-        {solution_code}
-        ```
-        
-        Please review it.
-        """
+        system_prompt = SYSTEM_PROMPT
+        user_prompt = USER_PROMPT_TEMPLATE.format(
+            problem_statement=problem_statement,
+            language=language,
+            solution_code=solution_code
+        )
         
         print(f"Sending request to OpenAI ({self.model_name})...")
         
