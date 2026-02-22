@@ -429,28 +429,42 @@ else:
         if not solutions_df.empty:
             st.markdown("### Solutions")
 
-            latest_sol = solutions_df.iloc[0]
-            sol_id = latest_sol["id"]
+            # Create formatting for the dropdown options
+            solution_options = []
+            for _, row in solutions_df.iterrows():
+                fname = row['file_path'].split('/')[-1]
+                solution_options.append(f"{row['submitted_at']} - {fname} ({row['language']})")
+                
+            selected_option = st.selectbox(
+                "Select Submission:", 
+                options=solution_options,
+                index=0, 
+                key=f"sol_select_{prob_id}"
+            )
+            
+            selected_idx = solution_options.index(selected_option)
+            selected_sol = solutions_df.iloc[selected_idx]
+            sol_id = selected_sol["id"]
 
             col1, col2 = st.columns(2)
 
             with col1:
-                st.markdown(f"**Latest Submission:** {latest_sol['submitted_at']} ({latest_sol['language']})")
+                st.markdown(f"**Viewing:** {selected_sol['file_path'].split('/')[-1]}")
                 
                 # Dynamically construct path using the current problem name slug
                 current_slug = sanitize_name(prof_row["name"])
                 
                 # Backwards compatible: if the DB still has old absolute paths, just use them.
                 # If it's just a filename (the new way), prepend the directories.
-                if "/" in latest_sol["file_path"]:
-                    sol_path = os.path.join(BASE_DIR, latest_sol["file_path"])
+                if "/" in selected_sol["file_path"]:
+                    sol_path = os.path.join(BASE_DIR, selected_sol["file_path"])
                 else:
-                    sol_path = os.path.join(BASE_DIR, "problems", current_slug, "solutions", latest_sol["file_path"])
+                    sol_path = os.path.join(BASE_DIR, "problems", current_slug, "solutions", selected_sol["file_path"])
                     
                 if os.path.exists(sol_path):
                     with open(sol_path, "r", encoding="utf-8") as f:
                         code = f.read()
-                    st.code(code, language=latest_sol["language"])
+                    st.code(code, language=selected_sol["language"])
                 else:
                     st.error(f"File not found: {sol_path}")
 
