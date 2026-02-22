@@ -14,7 +14,8 @@ from utils import sanitize_name
 from db import get_problems_count, get_problems_page, update_problem_metadata
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "dsa_data.db")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+DB_PATH = os.path.join(DATA_DIR, "dsa_data.db")
 
 PAGE_SIZE = 20
 
@@ -419,7 +420,7 @@ else:
                         del st.session_state[f"patterns_{prob_id}"]
                     st.rerun()
 
-        prob_file_path = os.path.join(BASE_DIR, "problems", sanitize_name(prof_row["name"]), "problem.md")
+        prob_file_path = os.path.join(DATA_DIR, "problems", sanitize_name(prof_row["name"]), "problem.md")
         if os.path.exists(prob_file_path):
             with st.expander("📝 Problem Statement", expanded=False):
                 with open(prob_file_path, "r", encoding="utf-8") as f:
@@ -459,7 +460,7 @@ else:
                 if "/" in selected_sol["file_path"]:
                     sol_path = os.path.join(BASE_DIR, selected_sol["file_path"])
                 else:
-                    sol_path = os.path.join(BASE_DIR, "problems", current_slug, "solutions", selected_sol["file_path"])
+                    sol_path = os.path.join(DATA_DIR, "problems", current_slug, "solutions", selected_sol["file_path"])
                     
                 if os.path.exists(sol_path):
                     with open(sol_path, "r", encoding="utf-8") as f:
@@ -476,7 +477,7 @@ else:
                     if "/" in fb_raw_path:
                         fb_path = os.path.join(BASE_DIR, fb_raw_path)
                     else:
-                        fb_path = os.path.join(BASE_DIR, "problems", current_slug, "feedback", fb_raw_path)
+                        fb_path = os.path.join(DATA_DIR, "problems", current_slug, "feedback", fb_raw_path)
                         
                     if os.path.exists(fb_path):
                         with open(fb_path, "r", encoding="utf-8") as f:

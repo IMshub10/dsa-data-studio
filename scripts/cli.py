@@ -17,7 +17,8 @@ from utils import sanitize_name
 app = typer.Typer(help="DSA Data Studio CLI for managing LeetCode solutions and LLM feedback.")
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-PROBLEMS_DIR = os.path.join(BASE_DIR, "problems")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+PROBLEMS_DIR = os.path.join(DATA_DIR, "problems")
 
 @app.command()
 def init():

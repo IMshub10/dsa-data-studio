@@ -3,11 +3,8 @@
 venv/
 env/
 
-# Database
-dsa_data.db
-
-# Local solutions & feedback
-problems/
+# Local Data (DB & Problem files)
+data/
 
 # IDEs
 .idea/

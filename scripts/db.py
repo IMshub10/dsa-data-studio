@@ -2,7 +2,13 @@ import os
 import sqlite3
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dsa_data.db")
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(DATA_DIR, "dsa_data.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
