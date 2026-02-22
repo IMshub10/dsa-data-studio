@@ -173,6 +173,17 @@ st.markdown("""
         padding: 10px;
         border: 1px solid var(--secondary-background-color);
     }
+
+    /* LLM Feedback Box */
+    .llm-feedback-box {
+        background: rgba(128, 128, 128, 0.1) !important;
+        border: 1px solid rgba(150, 150, 150, 0.2) !important;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 10px;
+        margin-bottom: 10px;
+        box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.02);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -460,7 +471,8 @@ else:
                                 content = content[11:]
                             if content.endswith("```"):
                                 content = content[:-3]
-                            st.markdown(content.strip())
+                        # Wrap the feedback inside a stylized div
+                        st.markdown(f'<div class="llm-feedback-box">{content.strip()}</div>', unsafe_allow_html=True)
                             
                         # Show API Usage if available
                         usage_df = load_api_usage(prob_id)
