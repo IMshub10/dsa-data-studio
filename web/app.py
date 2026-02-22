@@ -43,94 +43,137 @@ st.set_page_config(page_title="DSA Data Studio", layout="wide")
 
 st.markdown("""
 <style>
-    /* Import clean font */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* Import modern font */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
-    /* Global font */
+    /* Global styling */
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
+        font-family: 'Outfit', sans-serif !important;
+        letter-spacing: 0.2px;
     }
 
-    /* Headers — weight only, no hardcoded colors */
+    /* Headings & Gradient text */
     h1 {
-        font-weight: 700 !important;
-        letter-spacing: -0.5px !important;
+        font-weight: 800 !important;
+        letter-spacing: -1px !important;
+        background: -webkit-linear-gradient(45deg, #00E5FF, #8A2BE2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 5px !important;
     }
-    h2, h4 {
+    h2, h3, h4 {
         font-weight: 600 !important;
+        color: #FFFFFF !important;
     }
 
-    /* ── Light mode ── */
-    @media (prefers-color-scheme: light) {
-        span[data-baseweb="tag"] {
-            background-color: #E8EAF6 !important;
-            color: #283593 !important;
-            border: 1px solid #C5CAE9 !important;
-        }
-        span[data-baseweb="tag"] span[role="presentation"] {
-            color: #5C6BC0 !important;
-        }
-        [data-testid="stDataEditor"] {
-            border: 1px solid #E0E0E0;
-        }
-        hr { border-color: #ECEFF1 !important; }
-        .subtitle { color: #78909C; }
+    /* Subtitle text */
+    .subtitle {
+        font-size: 18px;
+        margin-top: -5px;
+        margin-bottom: 30px;
+        color: #A0AEC0;
+        font-weight: 300;
     }
 
-    /* ── Dark mode ── */
-    @media (prefers-color-scheme: dark) {
-        span[data-baseweb="tag"] {
-            background-color: rgba(129, 140, 248, 0.15) !important;
-            color: #A5B4FC !important;
-            border: 1px solid rgba(129, 140, 248, 0.3) !important;
-        }
-        span[data-baseweb="tag"] span[role="presentation"] {
-            color: #818CF8 !important;
-        }
-        [data-testid="stDataEditor"] {
-            border: 1px solid #374151;
-        }
-        hr { border-color: #374151 !important; }
-        .subtitle { color: #9CA3AF; }
-        .stButton > button:hover {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
-        }
+    /* Metrics Styling */
+    [data-testid="stMetricValue"] {
+        color: #00E5FF !important;
+        font-weight: 700 !important;
+        font-size: 2.8rem !important;
+        text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
     }
-
-    /* ── Shared (both modes) ── */
-    span[data-baseweb="tag"] {
-        border-radius: 16px !important;
-        font-size: 13px !important;
+    [data-testid="stMetricLabel"] {
+        color: #A0AEC0 !important;
+        font-size: 1rem !important;
         font-weight: 500 !important;
-        padding: 2px 10px !important;
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }
 
+    /* Glassmorphism Data Editor container */
     [data-testid="stDataEditor"] {
-        border-radius: 8px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: rgba(25, 25, 25, 0.6) !important;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
     }
 
+    /* Tags styling */
+    span[data-baseweb="tag"] {
+        background: linear-gradient(135deg, rgba(138, 43, 226, 0.15), rgba(0, 229, 255, 0.15)) !important;
+        color: #00E5FF !important;
+        border: 1px solid rgba(0, 229, 255, 0.2) !important;
+        border-radius: 12px !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        padding: 4px 12px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    span[data-baseweb="tag"] span[role="presentation"] {
+        color: #8A2BE2 !important;
+    }
+
+    /* Buttons */
     .stButton > button {
         border-radius: 8px !important;
-        font-weight: 500 !important;
-        transition: all 0.2s ease !important;
+        font-weight: 600 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.3s ease !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background-color: rgba(40, 40, 40, 0.8) !important;
+        color: white !important;
     }
     .stButton > button:hover {
-        transform: translateY(-1px) !important;
+        transform: translateY(-2px) !important;
+        border-color: #00E5FF !important;
+        box-shadow: 0 4px 15px rgba(0, 229, 255, 0.15) !important;
+    }
+    
+    /* Primary buttons */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #00E5FF, #8A2BE2) !important;
+        color: white !important;
+        border: none !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        box-shadow: 0 6px 20px rgba(0, 229, 255, 0.4) !important;
+        transform: translateY(-2px) !important;
     }
 
-    [data-baseweb="select"] {
-        border-radius: 8px !important;
-    }
-
+    /* Expanders (accordion) */
     .streamlit-expanderHeader {
-        font-weight: 500 !important;
-        font-size: 15px !important;
+        font-weight: 600 !important;
+        font-size: 16px !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        border-radius: 8px !important;
+        transition: background 0.2s ease;
+    }
+    .streamlit-expanderHeader:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+    }
+    [data-testid="stExpander"] {
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border-radius: 8px !important;
+        background: rgba(20, 20, 20, 0.4) !important;
+        backdrop-filter: blur(5px);
     }
 
-    .subtitle {
-        font-size: 16px;
-        margin-top: -10px;
-        margin-bottom: 24px;
+    /* Dividers */
+    hr { 
+        border-color: rgba(255, 255, 255, 0.08) !important; 
+        margin-top: 2rem !important;
+        margin-bottom: 2rem !important;
+    }
+    
+    /* Chart Area */
+    [data-testid="stChart"] {
+        background: rgba(20, 20, 20, 0.4) !important;
+        border-radius: 12px;
+        padding: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -211,8 +254,8 @@ else:
     problems_df = pd.DataFrame(page_rows)
 
     # Editable table
-    display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
-    editable_cols = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status"]
+    display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+    editable_cols = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
 
     # Keep a snapshot of the original data for diffing
     original_df = problems_df[display_cols].copy()
@@ -220,6 +263,11 @@ else:
     column_config = {
         "id": st.column_config.NumberColumn("ID", disabled=True),
         "link": st.column_config.TextColumn("Link"),
+        "time_complexity": st.column_config.TextColumn("Time Complex"),
+        "space_complexity": st.column_config.TextColumn("Space Complex"),
+        "l4_code_quality": st.column_config.SelectboxColumn("Code Quality", options=["", "Needs Work", "Good", "Strong"]),
+        "l4_edge_cases": st.column_config.SelectboxColumn("Edge Cases", options=["", "Missed", "Handled", "Documented"]),
+        "l4_scalability": st.column_config.SelectboxColumn("Scalability", options=["", "Missed", "Discussed", "Strong Context"]),
     }
 
     edited_df = st.data_editor(
