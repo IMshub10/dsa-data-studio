@@ -271,15 +271,21 @@ with tab_problems:
         page_rows = get_problems_page(st.session_state.current_page, PAGE_SIZE)
         problems_df = pd.DataFrame(page_rows)
 
+        # Overwrite pattern column with FK-linked pattern names
+        problems_df["pattern"] = problems_df["id"].apply(
+            lambda pid: ", ".join(p["name"] for p in get_patterns_for_problem(int(pid)))
+        )
+
         # Editable table
         display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
-        editable_cols = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+        editable_cols = ["name", "link", "topic", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
 
         # Keep a snapshot of the original data for diffing
         original_df = problems_df[display_cols].copy()
 
         column_config = {
             "id": st.column_config.NumberColumn("ID", disabled=True),
+            "pattern": st.column_config.TextColumn("Patterns (linked)", disabled=True),
             "link": st.column_config.TextColumn("Link"),
             "time_complexity": st.column_config.TextColumn("Time Complex"),
             "space_complexity": st.column_config.TextColumn("Space Complex"),
