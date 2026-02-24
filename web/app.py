@@ -11,11 +11,16 @@ if SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, SCRIPTS_DIR)
 
 from utils import sanitize_name
-from db import get_problems_count, get_problems_page, update_problem_metadata
+from db import (
+    get_problems_count, get_problems_page, update_problem_metadata,
+    get_all_patterns, get_problems_for_pattern, get_patterns_for_problem,
+    link_problem_to_pattern
+)
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "dsa_data.db")
+PATTERNS_DIR = os.path.join(DATA_DIR, "patterns")
 
 PAGE_SIZE = 20
 
@@ -238,283 +243,341 @@ def load_analytics():
         return total_cost, daily_df
 
 # --- Page title ---
-
 st.title("DSA Data Studio")
 st.markdown('<p class="subtitle">Track your LeetCode problem solving progress and view LLM optimizations.</p>', unsafe_allow_html=True)
 
-# --- Problem Log with pagination ---
+# --- Tab Navigation ---
+tab_problems, tab_patterns, tab_metrics = st.tabs(["📚 Problems", "🧩 Patterns", "📈 Metrics"])
 
-st.header("📚 Problem Log")
+with tab_problems:
+    # --- Problem Log with pagination ---
 
-total = get_problems_count()
+    st.header("📚 Problem Log")
 
-if total == 0:
-    st.info("No problems recorded yet. Use `dsa new <problem_name>` to get started.")
-else:
-    total_pages = max(1, math.ceil(total / PAGE_SIZE))
+    total = get_problems_count()
 
-    # Initialise page in session state
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = 1
+    if total == 0:
+        st.info("No problems recorded yet. Use `dsa new <problem_name>` to get started.")
+    else:
+        total_pages = max(1, math.ceil(total / PAGE_SIZE))
 
-    # Clamp in case rows were deleted
-    st.session_state.current_page = min(st.session_state.current_page, total_pages)
+        # Initialise page in session state
+        if "current_page" not in st.session_state:
+            st.session_state.current_page = 1
 
-    page_rows = get_problems_page(st.session_state.current_page, PAGE_SIZE)
-    problems_df = pd.DataFrame(page_rows)
+        # Clamp in case rows were deleted
+        st.session_state.current_page = min(st.session_state.current_page, total_pages)
 
-    # Editable table
-    display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
-    editable_cols = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+        page_rows = get_problems_page(st.session_state.current_page, PAGE_SIZE)
+        problems_df = pd.DataFrame(page_rows)
 
-    # Keep a snapshot of the original data for diffing
-    original_df = problems_df[display_cols].copy()
+        # Editable table
+        display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+        editable_cols = ["name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
 
-    column_config = {
-        "id": st.column_config.NumberColumn("ID", disabled=True),
-        "link": st.column_config.TextColumn("Link"),
-        "time_complexity": st.column_config.TextColumn("Time Complex"),
-        "space_complexity": st.column_config.TextColumn("Space Complex"),
-        "l4_code_quality": st.column_config.SelectboxColumn("Code Quality", options=["", "Needs Work", "Good", "Strong"]),
-        "l4_edge_cases": st.column_config.SelectboxColumn("Edge Cases", options=["", "Missed", "Handled", "Documented"]),
-        "l4_scalability": st.column_config.SelectboxColumn("Scalability", options=["", "Missed", "Discussed", "Strong Context"]),
-    }
+        # Keep a snapshot of the original data for diffing
+        original_df = problems_df[display_cols].copy()
 
-    edited_df = st.data_editor(
-        problems_df[display_cols],
-        column_config=column_config,
-        use_container_width=True,
-        height=400,
-        num_rows="fixed",
-        key="problem_editor"
-    )
+        column_config = {
+            "id": st.column_config.NumberColumn("ID", disabled=True),
+            "link": st.column_config.TextColumn("Link"),
+            "time_complexity": st.column_config.TextColumn("Time Complex"),
+            "space_complexity": st.column_config.TextColumn("Space Complex"),
+            "l4_code_quality": st.column_config.SelectboxColumn("Code Quality", options=["", "Needs Work", "Good", "Strong"]),
+            "l4_edge_cases": st.column_config.SelectboxColumn("Edge Cases", options=["", "Missed", "Handled", "Documented"]),
+            "l4_scalability": st.column_config.SelectboxColumn("Scalability", options=["", "Missed", "Discussed", "Strong Context"]),
+        }
 
-    # Detect changes
-    changed_mask = (edited_df[editable_cols].fillna("") != original_df[editable_cols].fillna("")).any(axis=1)
-    changed_rows = edited_df[changed_mask]
-
-    if not changed_rows.empty:
-        st.warning(f"You have unsaved changes in **{len(changed_rows)} row(s)**.")
-
-        with st.expander("Preview changes", expanded=True):
-            for _, row in changed_rows.iterrows():
-                orig = original_df[original_df["id"] == row["id"]].iloc[0]
-                st.markdown(f"**{row['name']}**")
-                for col in editable_cols:
-                    old_val = str(orig[col]) if pd.notna(orig[col]) else ""
-                    new_val = str(row[col]) if pd.notna(row[col]) else ""
-                    if old_val != new_val:
-                        st.markdown(f"- `{col}`: ~~{old_val or '(empty)'}~~ → **{new_val or '(empty)'}**")
-
-        btn_col1, btn_col2, _ = st.columns([1, 1, 10], gap="small")
-        with btn_col1:
-            if st.button("Save Changes", type="primary"):
-                for _, row in changed_rows.iterrows():
-                    orig_row = original_df[original_df["id"] == row["id"]].iloc[0]
-                    metadata = {col: row[col] for col in editable_cols}
-                    
-                    # If name was changed, rename the local directory
-                    # The DB only stores bare filenames for solutions/feedback now, so we don't need to bulk update child paths!
-                    if row["name"] != orig_row["name"]:
-                        old_slug = sanitize_name(orig_row["name"])
-                        new_slug = sanitize_name(row["name"])
-                        old_path = os.path.join(BASE_DIR, "problems", old_slug)
-                        new_path = os.path.join(BASE_DIR, "problems", new_slug)
-                        if os.path.exists(old_path) and not os.path.exists(new_path):
-                            os.rename(old_path, new_path)
-                            
-                    print(f"DEBUG SAVING ID {row['id']}: {metadata}")
-                    update_problem_metadata(int(row["id"]), metadata)
-                st.success(f"Saved {len(changed_rows)} row(s) to database!")
-                if "problem_editor" in st.session_state:
-                    del st.session_state["problem_editor"]
-                st.rerun()
-        with btn_col2:
-            if st.button("Discard"):
-                if "problem_editor" in st.session_state:
-                    del st.session_state["problem_editor"]
-                st.rerun()
-
-    # Pagination controls
-    col_prev, col_info, col_next = st.columns([1, 3, 1])
-    with col_prev:
-        if st.button("← Prev", disabled=(st.session_state.current_page <= 1)):
-            st.session_state.current_page -= 1
-            st.rerun()
-    with col_info:
-        start = (st.session_state.current_page - 1) * PAGE_SIZE + 1
-        end = min(st.session_state.current_page * PAGE_SIZE, total)
-        st.markdown(
-            f"<div style='text-align:center; padding-top:6px;'>Page <b>{st.session_state.current_page}</b> of <b>{total_pages}</b> &nbsp;·&nbsp; showing {start}–{end} of {total}</div>",
-            unsafe_allow_html=True
+        edited_df = st.data_editor(
+            problems_df[display_cols],
+            column_config=column_config,
+            use_container_width=True,
+            height=400,
+            num_rows="fixed",
+            key="problem_editor"
         )
-    with col_next:
-        if st.button("Next →", disabled=(st.session_state.current_page >= total_pages)):
-            st.session_state.current_page += 1
-            st.rerun()
+
+        # Detect changes
+        changed_mask = (edited_df[editable_cols].fillna("") != original_df[editable_cols].fillna("")).any(axis=1)
+        changed_rows = edited_df[changed_mask]
+
+        if not changed_rows.empty:
+            st.warning(f"You have unsaved changes in **{len(changed_rows)} row(s)**.")
+
+            with st.expander("Preview changes", expanded=True):
+                for _, row in changed_rows.iterrows():
+                    orig = original_df[original_df["id"] == row["id"]].iloc[0]
+                    st.markdown(f"**{row['name']}**")
+                    for col in editable_cols:
+                        old_val = str(orig[col]) if pd.notna(orig[col]) else ""
+                        new_val = str(row[col]) if pd.notna(row[col]) else ""
+                        if old_val != new_val:
+                            st.markdown(f"- `{col}`: ~~{old_val or '(empty)'}~~ → **{new_val or '(empty)'}**")
+
+            btn_col1, btn_col2, _ = st.columns([1, 1, 10], gap="small")
+            with btn_col1:
+                if st.button("Save Changes", type="primary"):
+                    for _, row in changed_rows.iterrows():
+                        orig_row = original_df[original_df["id"] == row["id"]].iloc[0]
+                        metadata = {col: row[col] for col in editable_cols}
+
+                        # If name was changed, rename the local directory
+                        # The DB only stores bare filenames for solutions/feedback now, so we don't need to bulk update child paths!
+                        if row["name"] != orig_row["name"]:
+                            old_slug = sanitize_name(orig_row["name"])
+                            new_slug = sanitize_name(row["name"])
+                            old_path = os.path.join(BASE_DIR, "problems", old_slug)
+                            new_path = os.path.join(BASE_DIR, "problems", new_slug)
+                            if os.path.exists(old_path) and not os.path.exists(new_path):
+                                os.rename(old_path, new_path)
+
+                        print(f"DEBUG SAVING ID {row['id']}: {metadata}")
+                        update_problem_metadata(int(row["id"]), metadata)
+                    st.success(f"Saved {len(changed_rows)} row(s) to database!")
+                    if "problem_editor" in st.session_state:
+                        del st.session_state["problem_editor"]
+                    st.rerun()
+            with btn_col2:
+                if st.button("Discard"):
+                    if "problem_editor" in st.session_state:
+                        del st.session_state["problem_editor"]
+                    st.rerun()
+
+        # Pagination controls
+        col_prev, col_info, col_next = st.columns([1, 3, 1])
+        with col_prev:
+            if st.button("← Prev", disabled=(st.session_state.current_page <= 1)):
+                st.session_state.current_page -= 1
+                st.rerun()
+        with col_info:
+            start = (st.session_state.current_page - 1) * PAGE_SIZE + 1
+            end = min(st.session_state.current_page * PAGE_SIZE, total)
+            st.markdown(
+                f"<div style='text-align:center; padding-top:6px;'>Page <b>{st.session_state.current_page}</b> of <b>{total_pages}</b> &nbsp;·&nbsp; showing {start}–{end} of {total}</div>",
+                unsafe_allow_html=True
+            )
+        with col_next:
+            if st.button("Next →", disabled=(st.session_state.current_page >= total_pages)):
+                st.session_state.current_page += 1
+                st.rerun()
+
+        st.divider()
+
+        # --- Detail View ---
+        st.header("🔍 Detail View")
+
+        problem_names = problems_df["name"].tolist()
+        selected_name = st.selectbox(
+            "Select a problem from this page to view details:",
+            options=[None] + problem_names,
+            format_func=lambda x: "— select a problem —" if x is None else x
+        )
+
+        if selected_name:
+            prof_row = problems_df[problems_df["name"] == selected_name].iloc[0]
+            prob_id = prof_row["id"]
+
+            st.subheader(f"{prof_row['name']}")
+            if prof_row["link"]:
+                st.markdown(f"**Link:** [Problem URL]({prof_row['link']})")
+
+            # --- Topic & Pattern multi-select tagging ---
+            st.markdown("#### Tags")
+            tag_col1, tag_col2 = st.columns(2)
+
+            # Parse existing comma-separated topics
+            current_topics = [t.strip() for t in str(prof_row.get("topic") or "").split(",") if t.strip()]
+
+            # Load pattern links from FK join table
+            all_db_patterns = get_all_patterns()
+            all_pattern_names = [p["name"] for p in all_db_patterns]
+            linked_patterns = get_patterns_for_problem(int(prob_id))
+            current_pattern_names = [p["name"] for p in linked_patterns]
+
+            with tag_col1:
+                selected_topics = st.multiselect(
+                    "Topics",
+                    options=sorted(set(DSA_TOPICS + current_topics)),
+                    default=current_topics,
+                    key=f"topics_{prob_id}"
+                )
+            with tag_col2:
+                selected_patterns = st.multiselect(
+                    "Patterns",
+                    options=sorted(set(all_pattern_names)),
+                    default=current_pattern_names,
+                    key=f"patterns_{prob_id}"
+                )
+
+            # Check if tags changed
+            new_topic_str = ", ".join(selected_topics)
+            old_topic_str = ", ".join(current_topics)
+            patterns_changed = set(selected_patterns) != set(current_pattern_names)
+
+            if new_topic_str != old_topic_str or patterns_changed:
+                tag_btn1, tag_btn2, _ = st.columns([1, 1, 10], gap="small")
+                with tag_btn1:
+                    if st.button("Save Tags", type="primary", key=f"save_tags_{prob_id}"):
+                        # Save topic text
+                        update_problem_metadata(int(prob_id), {
+                            "topic": new_topic_str,
+                            "pattern": ", ".join(selected_patterns)
+                        })
+                        # Sync FK links: delete removed, add new
+                        conn = get_connection()
+                        conn.execute("DELETE FROM problem_patterns WHERE problem_id = ?", (int(prob_id),))
+                        conn.commit()
+                        conn.close()
+                        for pat_name in selected_patterns:
+                            pat = next((p for p in all_db_patterns if p["name"] == pat_name), None)
+                            if pat:
+                                link_problem_to_pattern(int(prob_id), pat["id"])
+                        st.success("Tags saved!")
+                        st.rerun()
+                with tag_btn2:
+                    if st.button("Discard", key=f"discard_tags_{prob_id}"):
+                        if f"topics_{prob_id}" in st.session_state:
+                            del st.session_state[f"topics_{prob_id}"]
+                        if f"patterns_{prob_id}" in st.session_state:
+                            del st.session_state[f"patterns_{prob_id}"]
+                        st.rerun()
+
+            prob_file_path = os.path.join(DATA_DIR, "problems", sanitize_name(prof_row["name"]), "problem.md")
+            if os.path.exists(prob_file_path):
+                with st.expander("📝 Problem Statement", expanded=False):
+                    with open(prob_file_path, "r", encoding="utf-8") as f:
+                        st.markdown(f.read())
+
+            solutions_df = load_solutions(prob_id)
+            if not solutions_df.empty:
+                st.markdown("### Solutions")
+
+                # Create formatting for the dropdown options
+                solution_options = []
+                for _, row in solutions_df.iterrows():
+                    fname = row['file_path'].split('/')[-1]
+                    solution_options.append(f"{row['submitted_at']} - {fname} ({row['language']})")
+
+                selected_option = st.selectbox(
+                    "Select Submission:", 
+                    options=solution_options,
+                    index=0, 
+                    key=f"sol_select_{prob_id}"
+                )
+
+                selected_idx = solution_options.index(selected_option)
+                selected_sol = solutions_df.iloc[selected_idx]
+                sol_id = selected_sol["id"]
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown(f"**Viewing:** {selected_sol['file_path'].split('/')[-1]}")
+
+                    # Dynamically construct path using the current problem name slug
+                    current_slug = sanitize_name(prof_row["name"])
+
+                    # Backwards compatible: if the DB still has old absolute paths, just use them.
+                    # If it's just a filename (the new way), prepend the directories.
+                    if "/" in selected_sol["file_path"]:
+                        sol_path = os.path.join(BASE_DIR, selected_sol["file_path"])
+                    else:
+                        sol_path = os.path.join(DATA_DIR, "problems", current_slug, "solutions", selected_sol["file_path"])
+
+                    if os.path.exists(sol_path):
+                        with open(sol_path, "r", encoding="utf-8") as f:
+                            code = f.read()
+                        st.code(code, language=selected_sol["language"])
+                    else:
+                        st.error(f"File not found: {sol_path}")
+
+                with col2:
+                    st.markdown("**LLM Feedback**")
+                    feedback_df = load_feedback(sol_id)
+                    if not feedback_df.empty:
+                        fb_raw_path = feedback_df.iloc[0]["feedback_path"]
+                        if "/" in fb_raw_path:
+                            fb_path = os.path.join(BASE_DIR, fb_raw_path)
+                        else:
+                            fb_path = os.path.join(DATA_DIR, "problems", current_slug, "feedback", fb_raw_path)
+
+                        if os.path.exists(fb_path):
+                            with open(fb_path, "r", encoding="utf-8") as f:
+                                content = f.read().strip()
+                                if content.startswith("```markdown"):
+                                    content = content[11:]
+                                if content.endswith("```"):
+                                    content = content[:-3]
+                            # Wrap the feedback inside a stylized div
+                            st.markdown(f'<div class="llm-feedback-box">{content.strip()}</div>', unsafe_allow_html=True)
+
+                            # Show API Usage if available
+                            usage_df = load_api_usage(prob_id)
+                            if not usage_df.empty:
+                                latest_usage = usage_df.iloc[0]
+                                st.caption(f"🤖 **Model:** `{latest_usage['model_name']}`  |  "
+                                           f"🪙 **Tokens:** {latest_usage['input_tokens']:,} in, {latest_usage['output_tokens']:,} out  |  "
+                                           f"💳 **Cost:** ${latest_usage['estimated_cost_usd']:.5f}")
+                        else:
+                            st.error("Feedback file not found.")
+                    else:
+                        st.info("No LLM feedback generated yet for this solution. Run `dsa review`.")
+            else:
+                st.info("No solutions submitted yet for this problem.")
 
     st.divider()
 
-    # --- Detail View ---
-    st.header("🔍 Detail View")
-
-    problem_names = problems_df["name"].tolist()
-    selected_name = st.selectbox(
-        "Select a problem from this page to view details:",
-        options=[None] + problem_names,
-        format_func=lambda x: "— select a problem —" if x is None else x
-    )
-
-    if selected_name:
-        prof_row = problems_df[problems_df["name"] == selected_name].iloc[0]
-        prob_id = prof_row["id"]
-
-        st.subheader(f"{prof_row['name']}")
-        if prof_row["link"]:
-            st.markdown(f"**Link:** [Problem URL]({prof_row['link']})")
-
-        # --- Topic & Pattern multi-select tagging ---
-        st.markdown("#### Tags")
-        tag_col1, tag_col2 = st.columns(2)
-
-        # Parse existing comma-separated values into lists
-        current_topics = [t.strip() for t in str(prof_row.get("topic") or "").split(",") if t.strip()]
-        current_patterns = [p.strip() for p in str(prof_row.get("pattern") or "").split(",") if p.strip()]
-
-        with tag_col1:
-            selected_topics = st.multiselect(
-                "Topics",
-                options=sorted(set(DSA_TOPICS + current_topics)),
-                default=current_topics,
-                key=f"topics_{prob_id}"
-            )
-        with tag_col2:
-            selected_patterns = st.multiselect(
-                "Patterns",
-                options=sorted(set(DSA_PATTERNS + current_patterns)),
-                default=current_patterns,
-                key=f"patterns_{prob_id}"
-            )
-
-        # Check if tags changed
-        new_topic_str = ", ".join(selected_topics)
-        new_pattern_str = ", ".join(selected_patterns)
-        old_topic_str = ", ".join(current_topics)
-        old_pattern_str = ", ".join(current_patterns)
-
-        if new_topic_str != old_topic_str or new_pattern_str != old_pattern_str:
-            tag_btn1, tag_btn2, _ = st.columns([1, 1, 10], gap="small")
-            with tag_btn1:
-                if st.button("Save Tags", type="primary", key=f"save_tags_{prob_id}"):
-                    update_problem_metadata(int(prob_id), {
-                        "topic": new_topic_str,
-                        "pattern": new_pattern_str
-                    })
-                    st.success("Tags saved!")
-                    st.rerun()
-            with tag_btn2:
-                if st.button("Discard", key=f"discard_tags_{prob_id}"):
-                    if f"topics_{prob_id}" in st.session_state:
-                        del st.session_state[f"topics_{prob_id}"]
-                    if f"patterns_{prob_id}" in st.session_state:
-                        del st.session_state[f"patterns_{prob_id}"]
-                    st.rerun()
-
-        prob_file_path = os.path.join(DATA_DIR, "problems", sanitize_name(prof_row["name"]), "problem.md")
-        if os.path.exists(prob_file_path):
-            with st.expander("📝 Problem Statement", expanded=False):
-                with open(prob_file_path, "r", encoding="utf-8") as f:
-                    st.markdown(f.read())
-
-        solutions_df = load_solutions(prob_id)
-        if not solutions_df.empty:
-            st.markdown("### Solutions")
-
-            # Create formatting for the dropdown options
-            solution_options = []
-            for _, row in solutions_df.iterrows():
-                fname = row['file_path'].split('/')[-1]
-                solution_options.append(f"{row['submitted_at']} - {fname} ({row['language']})")
-                
-            selected_option = st.selectbox(
-                "Select Submission:", 
-                options=solution_options,
-                index=0, 
-                key=f"sol_select_{prob_id}"
-            )
-            
-            selected_idx = solution_options.index(selected_option)
-            selected_sol = solutions_df.iloc[selected_idx]
-            sol_id = selected_sol["id"]
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.markdown(f"**Viewing:** {selected_sol['file_path'].split('/')[-1]}")
-                
-                # Dynamically construct path using the current problem name slug
-                current_slug = sanitize_name(prof_row["name"])
-                
-                # Backwards compatible: if the DB still has old absolute paths, just use them.
-                # If it's just a filename (the new way), prepend the directories.
-                if "/" in selected_sol["file_path"]:
-                    sol_path = os.path.join(BASE_DIR, selected_sol["file_path"])
-                else:
-                    sol_path = os.path.join(DATA_DIR, "problems", current_slug, "solutions", selected_sol["file_path"])
-                    
-                if os.path.exists(sol_path):
-                    with open(sol_path, "r", encoding="utf-8") as f:
-                        code = f.read()
-                    st.code(code, language=selected_sol["language"])
-                else:
-                    st.error(f"File not found: {sol_path}")
-
-            with col2:
-                st.markdown("**LLM Feedback**")
-                feedback_df = load_feedback(sol_id)
-                if not feedback_df.empty:
-                    fb_raw_path = feedback_df.iloc[0]["feedback_path"]
-                    if "/" in fb_raw_path:
-                        fb_path = os.path.join(BASE_DIR, fb_raw_path)
-                    else:
-                        fb_path = os.path.join(DATA_DIR, "problems", current_slug, "feedback", fb_raw_path)
-                        
-                    if os.path.exists(fb_path):
-                        with open(fb_path, "r", encoding="utf-8") as f:
-                            content = f.read().strip()
-                            if content.startswith("```markdown"):
-                                content = content[11:]
-                            if content.endswith("```"):
-                                content = content[:-3]
-                        # Wrap the feedback inside a stylized div
-                        st.markdown(f'<div class="llm-feedback-box">{content.strip()}</div>', unsafe_allow_html=True)
-                            
-                        # Show API Usage if available
-                        usage_df = load_api_usage(prob_id)
-                        if not usage_df.empty:
-                            latest_usage = usage_df.iloc[0]
-                            st.caption(f"🤖 **Model:** `{latest_usage['model_name']}`  |  "
-                                       f"🪙 **Tokens:** {latest_usage['input_tokens']:,} in, {latest_usage['output_tokens']:,} out  |  "
-                                       f"💳 **Cost:** ${latest_usage['estimated_cost_usd']:.5f}")
-                    else:
-                        st.error("Feedback file not found.")
-                else:
-                    st.info("No LLM feedback generated yet for this solution. Run `dsa review`.")
-        else:
-            st.info("No solutions submitted yet for this problem.")
-
-st.divider()
-
-# --- Analytics Header ---
-st.header("📈 Analytics")
-total_cost, daily_df = load_analytics()
-
-col1, col2 = st.columns([1, 4])
-with col1:
-    st.metric(label="Total LLM Review Cost (All Time)", value=f"${total_cost:.4f}")
+with tab_patterns:
+    st.subheader("🧩 DSA Patterns")
+    st.markdown('<p class="subtitle">Reusable code templates and recognition notes.</p>', unsafe_allow_html=True)
     
-with col2:
-    if not daily_df.empty:
-        st.line_chart(daily_df, y="count", height=150, x_label="Date", y_label="Problems Solved")
+    search_query = st.text_input("🔍 Search Patterns", "")
+    
+    patterns_list = get_all_patterns()
+    if not patterns_list:
+        st.info("No patterns found. Add one with: `dsa pattern <name> --add`")
     else:
-        st.info("Solve a problem to see your activity chart!")
+        for pat in patterns_list:
+            if search_query and search_query.lower() not in pat["name"].lower() and (pat["notes"] and search_query.lower() not in pat["notes"].lower()):
+                continue
+            
+            linked_probs = get_problems_for_pattern(pat["id"])
+            prob_names = [p["name"] for p in linked_probs]
+            
+            with st.expander(f"{pat['name']} ({len(prob_names)} probs)"):
+                st.markdown("#### When to use")
+                if pat["notes"]:
+                    st.markdown(pat["notes"])
+                else:
+                    st.caption("No notes")
+                
+                # Render markdown documents from disk
+                pattern_slug = sanitize_name(pat["name"])
+                pattern_doc_dir = os.path.join(PATTERNS_DIR, pattern_slug)
+                if os.path.isdir(pattern_doc_dir):
+                    docs = sorted([f for f in os.listdir(pattern_doc_dir) if f.endswith(".md")])
+                    if docs:
+                        st.markdown("#### Documents")
+                        for doc_name in docs:
+                            doc_path = os.path.join(pattern_doc_dir, doc_name)
+                            with open(doc_path, "r", encoding="utf-8") as f:
+                                doc_content = f.read()
+                            with st.expander(f"📄 {doc_name}"):
+                                st.markdown(doc_content)
+                
+                st.markdown(f"**Linked Problems:** {', '.join(prob_names) if prob_names else 'None'}")
+
+with tab_metrics:
+    # --- Analytics Header ---
+    st.header("📈 Analytics")
+    total_cost, daily_df = load_analytics()
+
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        st.metric(label="Total LLM Review Cost (All Time)", value=f"${total_cost:.4f}")
+
+    with col2:
+        if not daily_df.empty:
+            st.line_chart(daily_df, y="count", height=150, x_label="Date", y_label="Problems Solved")
+        else:
+            st.info("Solve a problem to see your activity chart!")

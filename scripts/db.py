@@ -73,6 +73,27 @@ def init_db():
     )
     ''')
 
+    # Create patterns table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS patterns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+
+    # Create problem_patterns table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS problem_patterns (
+        problem_id INTEGER NOT NULL,
+        pattern_id INTEGER NOT NULL,
+        PRIMARY KEY (problem_id, pattern_id),
+        FOREIGN KEY (problem_id) REFERENCES problems (id) ON DELETE CASCADE,
+        FOREIGN KEY (pattern_id) REFERENCES patterns (id) ON DELETE CASCADE
+    )
+    ''')
+
     # Add L4 tracking columns to existing problems table gracefully
     new_columns = [
         "time_complexity TEXT",
@@ -185,6 +206,8 @@ def delete_problem_from_db(problem_id: int):
     """Deletes a problem and its cascading dependencies explicitly for safety."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        # Delete child patterns links
+        cursor.execute("DELETE FROM problem_patterns WHERE problem_id = ?", (problem_id,))
         # Delete child feedback (via solution IDs)
         cursor.execute("DELETE FROM feedback WHERE solution_id IN (SELECT id FROM solutions WHERE problem_id = ?)", (problem_id,))
         # Delete child solutions
@@ -201,6 +224,62 @@ def add_api_usage(problem_id: int, provider: str, model_name: str, input_tokens:
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (problem_id, provider, model_name, input_tokens, output_tokens, estimated_cost_usd))
         return cursor.lastrowid
+
+def insert_pattern(name: str, notes: str = "") -> int:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO patterns (name, notes) VALUES (?, ?)",
+            (name, notes)
+        )
+        return cursor.lastrowid
+
+def get_pattern_by_name(name: str) -> dict:
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM patterns WHERE name = ?", (name,))
+        row = cursor.fetchone()
+    return dict(row) if row else None
+
+def get_all_patterns() -> list:
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM patterns ORDER BY name ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+def link_problem_to_pattern(problem_id: int, pattern_id: int):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR IGNORE INTO problem_patterns (problem_id, pattern_id) VALUES (?, ?)",
+            (problem_id, pattern_id)
+        )
+
+def get_problems_for_pattern(pattern_id: int) -> list:
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.* FROM problems p
+            JOIN problem_patterns pp ON p.id = pp.problem_id
+            WHERE pp.pattern_id = ?
+            ORDER BY p.name ASC
+        ''', (pattern_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_patterns_for_problem(problem_id: int) -> list:
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT pt.* FROM patterns pt
+            JOIN problem_patterns pp ON pt.id = pp.pattern_id
+            WHERE pp.problem_id = ?
+            ORDER BY pt.name ASC
+        ''', (problem_id,))
+        return [dict(row) for row in cursor.fetchall()]
 
 
 if __name__ == "__main__":

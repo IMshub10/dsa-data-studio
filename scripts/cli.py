@@ -10,7 +10,11 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(BASE_DIR, ".env")
 load_dotenv(dotenv_path=env_path, override=True)
 
-from db import init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, add_feedback, update_problem_metadata, delete_problem_from_db, add_api_usage
+from db import (
+    init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, 
+    add_feedback, update_problem_metadata, delete_problem_from_db, add_api_usage,
+    insert_pattern, get_pattern_by_name, get_all_patterns, link_problem_to_pattern, get_problems_for_pattern
+)
 from llm.factory import get_llm_provider
 from utils import sanitize_name
 
@@ -19,6 +23,7 @@ app = typer.Typer(help="DSA Data Studio CLI for managing LeetCode solutions and 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 PROBLEMS_DIR = os.path.join(DATA_DIR, "problems")
+PATTERNS_DIR = os.path.join(DATA_DIR, "patterns")
 
 @app.command()
 def init():
@@ -187,6 +192,24 @@ def log(problem_name: str):
     
     update_problem_metadata(problem["id"], metadata)
     typer.echo("Metadata updated successfully.")
+    
+    # Prompt for linking to a global DSA pattern (numbered selection)
+    all_pats = get_all_patterns()
+    if all_pats:
+        typer.echo("\nAvailable patterns:")
+        for i, p in enumerate(all_pats, 1):
+            typer.echo(f"  {i}. {p['name']}")
+        typer.echo("  0. Skip")
+        selection = typer.prompt("Select patterns (comma-separated numbers)", default="0")
+        if selection.strip() != "0":
+            for num_str in selection.split(","):
+                num_str = num_str.strip()
+                if num_str.isdigit() and 1 <= int(num_str) <= len(all_pats):
+                    pat = all_pats[int(num_str) - 1]
+                    link_problem_to_pattern(problem["id"], pat["id"])
+                    typer.echo(f"✅ Linked to {pat['name']}.")
+                elif num_str != "0":
+                    typer.echo(f"⚠️  Invalid selection: {num_str}")
 
 @app.command()
 def delete(problem_name: str, force: bool = typer.Option(False, "--force", "-f", help="Force deletion without confirmation")):
@@ -218,6 +241,126 @@ def delete(problem_name: str, force: bool = typer.Option(False, "--force", "-f",
         typer.echo(f"Directory {problem_dir} not found. Skipping file deletion.")
         
     typer.echo(f"Successfully deleted problem '{problem_name}'.")
+
+@app.command()
+def pattern(
+    name: str,
+    add: bool = typer.Option(False, "--add", "-a"),
+    link: str = typer.Option(None, "--link", "-l"),
+    add_doc: str = typer.Option(None, "--add-doc", "-d", help="Create a markdown document for this pattern")
+):
+    """View, add, or link a DSA pattern."""
+    safe_name = name.strip()
+    pattern_slug = sanitize_name(safe_name)
+    pattern_dir = os.path.join(PATTERNS_DIR, pattern_slug)
+    
+    if add:
+        notes = typer.prompt("When to use (notes)", default="", show_default=False)
+        
+        try:
+            pattern_id = insert_pattern(safe_name, notes)
+            os.makedirs(pattern_dir, exist_ok=True)
+            typer.echo(f"✅ Added pattern '{safe_name}' (ID: {pattern_id})")
+            typer.echo(f"📁 Folder: {pattern_dir}")
+            typer.echo(f"   Add documents with: ./dsa pattern \"{safe_name}\" --add-doc \"<name>\"")
+        except Exception as e:
+            if "UNIQUE constraint failed" in str(e):
+                typer.echo(f"❌ Pattern '{safe_name}' already exists.")
+            else:
+                typer.echo(f"❌ Error adding pattern: {e}")
+        return
+
+    if add_doc:
+        pat = get_pattern_by_name(safe_name)
+        if not pat:
+            typer.echo(f"❌ Pattern '{safe_name}' not found. Add it first using --add.")
+            return
+        
+        doc_slug = sanitize_name(add_doc)
+        doc_path = os.path.join(pattern_dir, f"{doc_slug}.md")
+        os.makedirs(pattern_dir, exist_ok=True)
+        
+        if os.path.exists(doc_path):
+            typer.echo(f"❌ Document '{doc_slug}.md' already exists.")
+            return
+        
+        with open(doc_path, "w", encoding="utf-8") as f:
+            f.write(f"# {add_doc}\n\n")
+            f.write(f"[Describe when to use this variant]\n\n")
+            f.write(f"## Template\n\n")
+            f.write(f"```java\n// paste your code here\n```\n")
+        
+        typer.echo(f"✅ Created document: {doc_path}")
+        typer.echo(f"   Edit this file to add your notes and code template.")
+        return
+
+    if link:
+        safe_prob_name = sanitize_name(link)
+        problem = get_problem_by_name(safe_prob_name)
+        if not problem:
+            typer.echo(f"❌ Problem '{safe_prob_name}' not found. Run 'dsa new' first.")
+            return
+            
+        pat = get_pattern_by_name(safe_name)
+        if not pat:
+            typer.echo(f"❌ Pattern '{safe_name}' not found. Add it first using --add.")
+            return
+            
+        link_problem_to_pattern(problem["id"], pat["id"])
+        typer.echo(f"✅ Linked problem '{safe_prob_name}' to pattern '{safe_name}'.")
+        return
+
+    # View mode
+    pat = get_pattern_by_name(safe_name)
+    if not pat:
+        typer.echo(f"❌ Pattern '{safe_name}' not found. Add it first using --add.")
+        return
+        
+    typer.echo(f"\nPattern: {pat['name']}")
+    typer.echo("──────────────────────────────")
+    typer.echo("When to use:")
+    if pat["notes"]:
+        for line in pat["notes"].split('\n'):
+            typer.echo(f"  - {line}")
+    else:
+        typer.echo("  (No notes)")
+
+    typer.echo("\nDocuments:")
+    if os.path.isdir(pattern_dir):
+        docs = sorted([f for f in os.listdir(pattern_dir) if f.endswith(".md")])
+        if docs:
+            for d in docs:
+                typer.echo(f"  → {d}")
+        else:
+            typer.echo("  (No documents yet — use --add-doc to create one)")
+    else:
+        typer.echo("  (No documents yet — use --add-doc to create one)")
+        
+    typer.echo("\nLinked Problems:")
+    problems = get_problems_for_pattern(pat["id"])
+    if problems:
+        for p in problems:
+            typer.echo(f"  → {p['name']}")
+    else:
+        typer.echo("  (No linked problems yet)")
+
+@app.command()
+def patterns():
+    """List all patterns and their linked problem counts."""
+    all_pats = get_all_patterns()
+    if not all_pats:
+        typer.echo("No patterns found. Add one with: dsa pattern <name> --add")
+        return
+        
+    typer.echo("┌──────────────────────────────┬─────────────────┐")
+    typer.echo("│ Pattern                      │ Problems Solved │")
+    typer.echo("├──────────────────────────────┼─────────────────┤")
+    for p in all_pats:
+        count = len(get_problems_for_pattern(p["id"]))
+        name_pad = p["name"].ljust(28)
+        count_pad = str(count).ljust(15)
+        typer.echo(f"│ {name_pad} │ {count_pad} │")
+    typer.echo("└──────────────────────────────┴─────────────────┘")
 
 if __name__ == "__main__":
     app()

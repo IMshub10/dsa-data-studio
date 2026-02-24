@@ -1,6 +1,6 @@
 # DSA Data Studio
 
-DSA Data Studio is a local CLI tool and web dashboard designed to help you track your LeetCode problem-solving progress. It allows you to save incremental solutions, log performance metadata in a SQLite database, and get automated L4/L5 standard code reviews and optimal solutions from your LLM of choice. The dashboard features an adaptive Light/Dark mode UI, API cost/token tracking, and historical submission viewing.
+DSA Data Studio is a local CLI tool and web dashboard designed to help you track your LeetCode problem-solving progress. It allows you to save incremental solutions, log performance metadata in a SQLite database, and get automated L4/L5 standard code reviews and optimal solutions from your LLM of choice. The dashboard features an adaptive Light/Dark mode UI, API cost/token tracking, historical submission viewing, and a dedicated DSA Patterns library.
 
 
 ## How does the UI look
@@ -94,6 +94,22 @@ Completely removes the problem directory from your disk and safely deletes all a
 
 # Skip the confirmation prompt
 ./dsa delete "Problem Name" --force
+```
+
+### 7. Manage Patterns
+View, add, or link reusable DSA patterns to your problems to build a repository of code templates and recognition notes.
+```bash
+# Add a new pattern interactively
+./dsa pattern "KMP" --add
+
+# View a pattern's details and linked problems
+./dsa pattern "KMP"
+
+# Link an existing problem to a pattern
+./dsa pattern "KMP" --link "Find Index of First Occurrence"
+
+# List all patterns and their linked problem counts
+./dsa patterns
 ```
 
 ---
