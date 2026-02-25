@@ -48,8 +48,16 @@ DSA Data Studio is a local CLI tool and web dashboard designed to help you track
 4. **Open the Web Dashboard**
    To view your progress logs, API metrics, and LLM feedback side-by-side, start the Streamlit server:
    ```bash
-   streamlit run web/app.py
+   streamlit run web/app.py --server.port 8501
    ```
+
+   *(Optional)* To access the dashboard at `http://dsa.datastudio.com:8501` instead of `localhost:8501`:
+   1. Add `127.0.0.1 dsa.datastudio.com` to your `/etc/hosts` file (macOS/Linux) or `C:\Windows\System32\drivers\etc\hosts` (Windows).
+   2. Edit your `.streamlit/config.toml` (create it if it doesn't exist) to allow CORS:
+      ```toml
+      [server]
+      enableCORS = false
+      ```
 
 ---
 
