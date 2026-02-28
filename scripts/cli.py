@@ -13,7 +13,8 @@ load_dotenv(dotenv_path=env_path, override=True)
 from db import (
     init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, 
     add_feedback, update_problem_metadata, delete_problem_from_db, add_api_usage,
-    insert_pattern, get_pattern_by_name, get_all_patterns, link_problem_to_pattern, get_problems_for_pattern
+    insert_pattern, get_pattern_by_name, get_all_patterns, link_problem_to_pattern, get_problems_for_pattern,
+    get_analytics_by_pattern
 )
 from llm.factory import get_llm_provider
 from utils import sanitize_name
@@ -346,21 +347,21 @@ def pattern(
 
 @app.command()
 def patterns():
-    """List all patterns and their linked problem counts."""
-    all_pats = get_all_patterns()
-    if not all_pats:
+    """List all patterns and their linked problem counts (Total & Solved)."""
+    pattern_data = get_analytics_by_pattern()
+    if not pattern_data:
         typer.echo("No patterns found. Add one with: dsa pattern <name> --add")
         return
         
-    typer.echo("┌──────────────────────────────┬─────────────────┐")
-    typer.echo("│ Pattern                      │ Problems Solved │")
-    typer.echo("├──────────────────────────────┼─────────────────┤")
-    for p in all_pats:
-        count = len(get_problems_for_pattern(p["id"]))
-        name_pad = p["name"].ljust(28)
-        count_pad = str(count).ljust(15)
-        typer.echo(f"│ {name_pad} │ {count_pad} │")
-    typer.echo("└──────────────────────────────┴─────────────────┘")
+    typer.echo("┌──────────────────────────────┬────────────────┬────────────────┐")
+    typer.echo("│ Pattern                      │ Total Problems │ Solved         │")
+    typer.echo("├──────────────────────────────┼────────────────┼────────────────┤")
+    for p in pattern_data:
+        name_pad = p["pattern_name"][:28].ljust(28)
+        total_pad = str(p["total_problems"]).ljust(14)
+        solved_pad = str(p["solved_problems"]).ljust(14)
+        typer.echo(f"│ {name_pad} │ {total_pad} │ {solved_pad} │")
+    typer.echo("└──────────────────────────────┴────────────────┴────────────────┘")
 
 if __name__ == "__main__":
     app()

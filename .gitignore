@@ -5,6 +5,7 @@ env/
 
 # Local Data (DB & Problem files)
 data/
+scripts/seed_curated_list.py
 
 # IDEs
 .idea/

@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import sys
 import math
+from datetime import datetime
 
 # Ensure scripts/ is on the path so shared utilities can be imported
 SCRIPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts")
@@ -14,7 +15,8 @@ from utils import sanitize_name
 from db import (
     get_problems_count, get_problems_page, update_problem_metadata,
     get_all_patterns, get_problems_for_pattern, get_patterns_for_problem,
-    link_problem_to_pattern
+    link_problem_to_pattern, get_solved_problems_count, get_todo_problems,
+    get_analytics_by_pattern, get_stale_patterns, get_focus_pattern, set_focus_pattern
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -247,7 +249,155 @@ st.title("DSA Data Studio")
 st.markdown('<p class="subtitle">Track your LeetCode problem solving progress and view LLM optimizations.</p>', unsafe_allow_html=True)
 
 # --- Tab Navigation ---
-tab_problems, tab_patterns, tab_metrics = st.tabs(["📚 Problems", "🧩 Patterns", "📈 Metrics"])
+tab_main, tab_problems, tab_patterns, tab_metrics = st.tabs(["🏠 Dashboard", "📚 Problems", "🧩 Patterns", "📈 Metrics"])
+
+with tab_main:
+    st.header("🏠 Main Dashboard")
+    
+    # --- Top Row Metrics ---
+    total_probs = get_problems_count()
+    total_solved = get_solved_problems_count()
+    total_todos = total_probs - total_solved
+    completion_rate = (total_solved / total_probs * 100) if total_probs > 0 else 0
+    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Solved", f"{total_solved} / {total_probs}")
+    m2.metric("Pending Todos", str(total_todos))
+    m3.metric("Completion Rate", f"{completion_rate:.1f}%")
+    
+    st.divider()
+    
+    # --- Current Focus Widget ---
+    focus_pat = get_focus_pattern()
+    if focus_pat:
+        # Calculate days active
+        started_at = datetime.strptime(focus_pat["focus_started_at"], "%Y-%m-%d %H:%M:%S")
+        days_active = (datetime.now() - started_at).days
+        
+        # Determine warning class
+        if days_active > 7:
+            status_color = "#FF4B4B" # Red
+            status_text = f"Stale Focus! Active for {days_active} days. Time to switch?"
+        elif days_active > 4:
+            status_color = "#FFA500" # Orange
+            status_text = f"Active for {days_active} days. Keep going!"
+        else:
+            status_color = "#00FF00" # Green
+            status_text = f"Fresh Focus! Active for {days_active} days."
+            
+        st.markdown(f"""
+        <div style="background: rgba(138, 43, 226, 0.1); border: 1px solid rgba(138, 43, 226, 0.4); border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: gray;">🎯 Current Focus Pattern</p>
+            <h2 style="margin: 5px 0;">{focus_pat['pattern_name']}</h2>
+            <p style="margin: 0; font-size: 18px; font-weight: bold; color: {status_color};">{status_text}</p>
+            <p style="margin: 5px 0 0 0; font-size: 14px; color: gray;">Progress: {focus_pat['solved_problems']} / {focus_pat['total_problems']} solved</p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.info("🎯 You have no active focus pattern! Go to the **Patterns** tab to set one.")
+
+    col_left, col_right = st.columns([2, 1], gap="large")
+    
+    with col_left:
+        # --- Analytics Section ---
+        st.subheader("📊 Pattern Progress")
+        pattern_data = get_analytics_by_pattern()
+        if pattern_data:
+            df_patterns = pd.DataFrame(pattern_data)
+            # Create a stacked bar chart showing solved vs un-solved per pattern
+            df_patterns["unsolved"] = df_patterns["total_problems"] - df_patterns["solved_problems"]
+            # Filter to patterns that actually have problems linked
+            df_active = df_patterns[df_patterns["total_problems"] > 0].copy()
+            
+            if not df_active.empty:
+                # We rename for the chart legend
+                df_active = df_active.rename(columns={"solved_problems": "Solved", "unsolved": "Unsolved"})
+                
+                # Melt the dataframe for Altair stacked bar chart
+                df_melted = df_active.melt(
+                    id_vars=["pattern_name"], 
+                    value_vars=["Solved", "Unsolved"],
+                    var_name="Status", 
+                    value_name="Count"
+                )
+                
+                import altair as alt
+                chart = alt.Chart(df_melted).mark_bar().encode(
+                    x=alt.X('pattern_name:N', title="", axis=alt.Axis(labelAngle=-45, labelLimit=200)),
+                    y=alt.Y('Count:Q', title="Problems"),
+                    color=alt.Color('Status:N', 
+                                    scale=alt.Scale(domain=['Solved', 'Unsolved'], 
+                                                    range=['#00E5FF', '#333333'])),
+                    tooltip=['pattern_name', 'Status', 'Count']
+                ).properties(height=300)
+                
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.info("No problems linked to patterns yet.")
+        else:
+            st.info("No pattern data available.")
+            
+        st.divider()
+        
+        # --- Todo Data Table ---
+        st.subheader("📝 Problem Queue")
+        todo_list = get_todo_problems(limit=100)  # load up to 100
+        if todo_list:
+            df_todo = pd.DataFrame(todo_list)
+            # Annotate with patterns
+            df_todo["pattern"] = df_todo["id"].apply(
+                lambda pid: ", ".join(p["name"] for p in get_patterns_for_problem(int(pid)))
+            )
+            # Show a simplified subset
+            display_cols = ["name", "topic", "pattern", "created_at"]
+            st.dataframe(
+                df_todo[display_cols],
+                use_container_width=True,
+                height=300,
+                hide_index=True
+            )
+        else:
+            st.success("Your Queue is empty! Great job!")
+
+    with col_right:
+        # --- Up Next ---
+        st.subheader("🎯 Up Next")
+        todo_list_short = get_todo_problems(limit=3)
+        if todo_list_short:
+            for prob in todo_list_short:
+                with st.container(border=True):
+                    st.markdown(f"**{prob['name']}**")
+                    pat_links = get_patterns_for_problem(int(prob['id']))
+                    pat_str = ", ".join(p["name"] for p in pat_links) if pat_links else "No Pattern"
+                    topic_str = prob.get("topic") or "No Topic"
+                    st.caption(f"🧩 {pat_str} | 🏷️ {topic_str}")
+        else:
+            st.info("Queue empty! Add more problems to solve.")
+            
+        st.divider()
+        
+        # --- Pattern Alert View ---
+        st.subheader("🚨 Review Alerts")
+        st.markdown("<p style='font-size: 14px; color: gray;'>Patterns not practiced recently (> 5 days).</p>", unsafe_allow_html=True)
+        stale_patterns = get_stale_patterns(days_threshold=5)
+        
+        if stale_patterns:
+            for pat in stale_patterns:
+                date_str = pat['last_solved_date']
+                if date_str:
+                    # Format standard DB timestamp "YYYY-MM-DD HH:MM:SS" to "YYYY-MM-DD"
+                    short_date = date_str.split(" ")[0]
+                    alert_text = f"Last solved: {short_date}"
+                    color = "orange"
+                else:
+                    alert_text = "Never solved"
+                    color = "red"
+                    
+                st.markdown(f"**{pat['pattern_name']}**")
+                st.markdown(f":{color}[_{alert_text}_]")
+        else:
+            st.success("All patterns are fresh! You've practiced everything recently.")
+
 
 with tab_problems:
     # --- Problem Log with pagination ---
@@ -551,6 +701,13 @@ with tab_patterns:
             prob_names = [p["name"] for p in linked_probs]
             
             with st.expander(f"{pat['name']} ({len(prob_names)} probs)"):
+                col_btn, col_rest = st.columns([1, 4])
+                with col_btn:
+                    if st.button("🎯 Set as Focus", key=f"focus_{pat['id']}"):
+                        set_focus_pattern(pat['id'])
+                        st.success(f"Focus set to {pat['name']}!")
+                        st.rerun()
+                
                 st.markdown("#### When to use")
                 if pat["notes"]:
                     st.markdown(pat["notes"])
@@ -571,7 +728,19 @@ with tab_patterns:
                             with st.expander(f"📄 {doc_name}"):
                                 st.markdown(doc_content)
                 
-                st.markdown(f"**Linked Problems:** {', '.join(prob_names) if prob_names else 'None'}")
+                if linked_probs:
+                    st.markdown("**Linked Problems:**")
+                    df_linked = pd.DataFrame(linked_probs)
+                    display_cols = ["name", "topic", "time_to_optimal", "created_at"]
+                    # Only keep columns that exist in the dataframe to prevent errors
+                    display_cols = [c for c in display_cols if c in df_linked.columns]
+                    st.dataframe(
+                        df_linked[display_cols],
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.markdown("**Linked Problems:** None")
 
 with tab_metrics:
     # --- Analytics Header ---

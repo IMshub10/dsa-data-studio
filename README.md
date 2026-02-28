@@ -1,6 +1,8 @@
 # DSA Data Studio
 
-DSA Data Studio is a local CLI tool and web dashboard designed to help you track your LeetCode problem-solving progress. It allows you to save incremental solutions, log performance metadata in a SQLite database, and get automated L4/L5 standard code reviews and optimal solutions from your LLM of choice. The dashboard features an adaptive Light/Dark mode UI, API cost/token tracking, historical submission viewing, and a dedicated DSA Patterns library.
+DSA Data Studio is a local CLI tool and web dashboard designed to help you track your LeetCode problem-solving progress. It allows you to save incremental solutions, log performance metadata in a SQLite database, and get automated L4/L5 standard code reviews and optimal solutions from your LLM of choice. 
+
+The application features an adaptive dashboard UI including **Current Focus tracking**, API cost metrics, historical submission viewing, structured **Problem Queues**, and a dedicated DSA Patterns library.
 
 
 ## How does the UI look
@@ -59,6 +61,12 @@ DSA Data Studio is a local CLI tool and web dashboard designed to help you track
       enableCORS = false
       ```
 
+5. **Set your Current Focus Pattern!**
+   - Open the **Dashboard**.
+   - Navigate to the **🧩 Patterns** Tab.
+   - Expand any pattern bucket you want to practice and click the `🎯 Set as Focus` button.
+   - Head back to the **🏠 Dashboard** Tab to track your progress and avoid stale study habits!
+
 ---
 
 ## 🛠️ CLI Commands
@@ -116,7 +124,7 @@ View, add, or link reusable DSA patterns to your problems to build a repository 
 # Link an existing problem to a pattern
 ./dsa pattern "KMP" --link "Find Index of First Occurrence"
 
-# List all patterns and their linked problem counts
+# List all patterns with their Total and Solved problem counts
 ./dsa patterns
 ```
 
@@ -145,6 +153,7 @@ dsa-data-studio/
 │   ├── cli.py                 # Typer configuration and CLI routing
 │   ├── db.py                  # SQLite schema definitions and query wrappers
 │   ├── utils.py               # Shared utility functions (e.g. sanitize_name)
+│   ├── seed_curated_list.py   # Populates the DB with the Master DP Bucket list
 │   └── llm/                   # Provider-agnostic LLM integration
 │       ├── base.py            # Abstract LLMProvider interface
 │       ├── factory.py         # Reads LLM_PROVIDER env var and returns the right provider

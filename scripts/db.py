@@ -108,6 +108,17 @@ def init_db():
         except sqlite3.OperationalError:
             pass # Column already exists
 
+    # Add focus tracking columns to existing patterns table gracefully
+    pattern_columns = [
+        "is_focus INTEGER DEFAULT 0",
+        "focus_started_at TIMESTAMP"
+    ]
+    for col in pattern_columns:
+        try:
+            cursor.execute(f"ALTER TABLE patterns ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+
     conn.commit()
     conn.close()
     print("Database initialized successfully.")
@@ -281,6 +292,111 @@ def get_patterns_for_problem(problem_id: int) -> list:
         ''', (problem_id,))
         return [dict(row) for row in cursor.fetchall()]
 
+# --- Dashboard & Analytics Helpers ---
+
+def get_solved_problems_count() -> int:
+    """Returns the count of unique problems that have at least one solution."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(DISTINCT problem_id) FROM solutions")
+        return cursor.fetchone()[0]
+
+def get_todo_problems(limit: int = 10) -> list:
+    """Returns problems that have NO entries in the solutions table."""
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.* FROM problems p
+            LEFT JOIN solutions s ON p.id = s.problem_id
+            WHERE s.id IS NULL
+            ORDER BY p.created_at DESC
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_analytics_by_pattern() -> list:
+    """Returns solve counts and total problem counts per pattern."""
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        # This query gets pattern names, total problems linked, and how many of those are solved
+        cursor.execute('''
+            SELECT 
+                pt.name as pattern_name,
+                COUNT(DISTINCT pp.problem_id) as total_problems,
+                COUNT(DISTINCT s.problem_id) as solved_problems
+            FROM patterns pt
+            LEFT JOIN problem_patterns pp ON pt.id = pp.pattern_id
+            LEFT JOIN solutions s ON pp.problem_id = s.problem_id
+            GROUP BY pt.id, pt.name
+            ORDER BY pt.name ASC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_stale_patterns(days_threshold: int = 5) -> list:
+    """
+    Returns patterns where either no problems have been solved,
+    or the most recent solution is older than `days_threshold` days.
+    """
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(f'''
+            SELECT 
+                pt.name as pattern_name,
+                MAX(s.submitted_at) as last_solved_date
+            FROM patterns pt
+            LEFT JOIN problem_patterns pp ON pt.id = pp.pattern_id
+            LEFT JOIN solutions s ON pp.problem_id = s.problem_id
+            GROUP BY pt.id, pt.name
+            HAVING last_solved_date IS NULL OR last_solved_date < datetime('now', '-{days_threshold} days')
+            ORDER BY last_solved_date ASC NULLS FIRST
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_pattern_id_by_name(name: str) -> int:
+    """Helper to get a pattern ID by name, useful for seeding scripts."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM patterns WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+def set_focus_pattern(pattern_id: int):
+    """Sets a specific pattern as the current focus, unsetting all others."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Reset all
+        cursor.execute("UPDATE patterns SET is_focus = 0, focus_started_at = NULL")
+        # Set new focus
+        cursor.execute(
+            "UPDATE patterns SET is_focus = 1, focus_started_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (pattern_id,)
+        )
+
+def get_focus_pattern() -> dict:
+    """Returns the currently focused pattern with its start date and completion metrics."""
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        # We join to get total problems and total solved
+        cursor.execute('''
+            SELECT 
+                pt.id,
+                pt.name as pattern_name,
+                pt.focus_started_at,
+                COUNT(DISTINCT pp.problem_id) as total_problems,
+                COUNT(DISTINCT s.problem_id) as solved_problems
+            FROM patterns pt
+            LEFT JOIN problem_patterns pp ON pt.id = pp.pattern_id
+            LEFT JOIN solutions s ON pp.problem_id = s.problem_id
+            WHERE pt.is_focus = 1
+            GROUP BY pt.id, pt.name, pt.focus_started_at
+            LIMIT 1
+        ''')
+        row = cursor.fetchone()
+    return dict(row) if row else None
 
 if __name__ == "__main__":
     init_db()
