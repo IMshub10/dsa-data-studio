@@ -17,7 +17,8 @@ from db import (
     get_all_patterns, get_problems_for_pattern, get_patterns_for_problem,
     link_problem_to_pattern, get_solved_problems_count, get_todo_problems,
     get_analytics_by_pattern, get_stale_patterns, get_focus_pattern, set_focus_pattern,
-    get_srs_queue, get_daily_activity, get_mock_interview_problems, get_cheat_sheet_data
+    get_srs_queue, get_daily_activity, get_mock_interview_problems, get_cheat_sheet_data,
+    get_latest_solution
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -446,9 +447,18 @@ with tab_problems:
         problems_df["pattern"] = problems_df["id"].apply(
             lambda pid: ", ".join(p["name"] for p in get_patterns_for_problem(int(pid)))
         )
+        
+        # Compute time spent from the latest solution for each problem
+        def _get_time_spent(pid):
+            sol = get_latest_solution(int(pid))
+            if sol and sol.get('time_spent_seconds') and sol['time_spent_seconds']:
+                ts = int(sol['time_spent_seconds'])
+                return f"{ts // 60}m {ts % 60}s"
+            return ""
+        problems_df["time_spent"] = problems_df["id"].apply(_get_time_spent)
 
         # Editable table
-        display_cols = ["id", "name", "link", "difficulty", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+        display_cols = ["id", "name", "link", "difficulty", "topic", "pattern", "time_spent", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
         editable_cols = ["name", "link", "difficulty", "topic", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
 
         # Keep a snapshot of the original data for diffing
@@ -459,6 +469,7 @@ with tab_problems:
             "pattern": st.column_config.TextColumn("Patterns (linked)", disabled=True),
             "link": st.column_config.TextColumn("Link"),
             "difficulty": st.column_config.SelectboxColumn("Diff (1-5)", options=[1, 2, 3, 4, 5]),
+            "time_spent": st.column_config.TextColumn("⏱️ Time", disabled=True),
             "time_complexity": st.column_config.TextColumn("Time Complex"),
             "space_complexity": st.column_config.TextColumn("Space Complex"),
             "l4_code_quality": st.column_config.SelectboxColumn("Code Quality", options=["", "Needs Work", "Good", "Strong"]),
@@ -475,8 +486,8 @@ with tab_problems:
             key="problem_editor"
         )
 
-        # Detect changes
-        changed_mask = (edited_df[editable_cols].fillna("") != original_df[editable_cols].fillna("")).any(axis=1)
+        # Detect changes — cast to string to avoid int/str type mismatch on columns like 'difficulty'
+        changed_mask = (edited_df[editable_cols].fillna("").astype(str) != original_df[editable_cols].fillna("").astype(str)).any(axis=1)
         changed_rows = edited_df[changed_mask]
 
         if not changed_rows.empty:
@@ -489,7 +500,7 @@ with tab_problems:
                     for col in editable_cols:
                         old_val = str(orig[col]) if pd.notna(orig[col]) else ""
                         new_val = str(row[col]) if pd.notna(row[col]) else ""
-                        if old_val != new_val:
+                        if str(old_val) != str(new_val):
                             st.markdown(f"- `{col}`: ~~{old_val or '(empty)'}~~ → **{new_val or '(empty)'}**")
 
             btn_col1, btn_col2, _ = st.columns([1, 1, 10], gap="small")

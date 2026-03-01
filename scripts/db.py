@@ -211,11 +211,18 @@ def update_problem_metadata(problem_id: int, metadata: dict):
     updates = []
     values = []
 
+    integer_fields = ["difficulty"]
+    
     for key, val in metadata.items():
         if key in valid_fields:
             # Handle float/NaN or None
             if val is None or (isinstance(val, float) and val != val):  # val != val is a safe NaN check
-                clean_val = ""
+                clean_val = None if key in integer_fields else ""
+            elif key in integer_fields:
+                try:
+                    clean_val = int(val)
+                except (ValueError, TypeError):
+                    clean_val = None
             else:
                 clean_val = str(val).strip()
                 

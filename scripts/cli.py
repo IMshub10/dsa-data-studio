@@ -14,7 +14,7 @@ from db import (
     init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, 
     add_feedback, update_problem_metadata, delete_problem_from_db, add_api_usage,
     insert_pattern, get_pattern_by_name, get_all_patterns, link_problem_to_pattern, get_problems_for_pattern,
-    get_analytics_by_pattern, update_srs_status
+    get_analytics_by_pattern, update_srs_status, set_focus_pattern, get_focus_pattern
 )
 from llm.factory import get_llm_provider
 from utils import sanitize_name
@@ -432,6 +432,29 @@ def patterns():
         solved_pad = str(p["solved_problems"]).ljust(14)
         typer.echo(f"│ {name_pad} │ {total_pad} │ {solved_pad} │")
     typer.echo("└──────────────────────────────┴────────────────┴────────────────┘")
+
+@app.command()
+def focus(pattern_name: str):
+    """Set a pattern as your current study focus."""
+    pat = get_pattern_by_name(pattern_name)
+    if not pat:
+        typer.echo(f"Pattern '{pattern_name}' not found. Run `dsa patterns` to see all available patterns.")
+        return
+    set_focus_pattern(pat["id"])
+    typer.echo(f"🎯 Focus set to: {pattern_name}")
+
+@app.command()
+def unfocus():
+    """Clear the current study focus pattern."""
+    current = get_focus_pattern()
+    if not current:
+        typer.echo("No pattern is currently focused.")
+        return
+    # Clear by setting is_focus=0 for all
+    from db import get_connection
+    with get_connection() as conn:
+        conn.cursor().execute("UPDATE patterns SET is_focus = 0, focus_started_at = NULL")
+    typer.echo(f"🎯 Focus cleared. (Was: {current['pattern_name']})")
 
 if __name__ == "__main__":
     app()

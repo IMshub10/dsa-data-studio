@@ -174,6 +174,16 @@ View, add, or link reusable DSA patterns to your problems to build a repository 
 ./dsa patterns
 ```
 
+### 8. Focus / Unfocus a Pattern
+Set or clear your current study focus directly from the terminal. This is the same as clicking "🎯 Set as Focus" in the Streamlit UI.
+```bash
+# Set a pattern as your active focus
+./dsa focus "Sliding Window"
+
+# Clear the current focus
+./dsa unfocus
+```
+
 ---
 
 ## Project Worktree
