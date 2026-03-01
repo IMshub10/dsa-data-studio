@@ -16,7 +16,8 @@ from db import (
     get_problems_count, get_problems_page, update_problem_metadata,
     get_all_patterns, get_problems_for_pattern, get_patterns_for_problem,
     link_problem_to_pattern, get_solved_problems_count, get_todo_problems,
-    get_analytics_by_pattern, get_stale_patterns, get_focus_pattern, set_focus_pattern
+    get_analytics_by_pattern, get_stale_patterns, get_focus_pattern, set_focus_pattern,
+    get_srs_queue, get_daily_activity, get_mock_interview_problems, get_cheat_sheet_data
 )
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -249,7 +250,14 @@ st.title("DSA Data Studio")
 st.markdown('<p class="subtitle">Track your LeetCode problem solving progress and view LLM optimizations.</p>', unsafe_allow_html=True)
 
 # --- Tab Navigation ---
-tab_main, tab_problems, tab_patterns, tab_metrics = st.tabs(["🏠 Dashboard", "📚 Problems", "🧩 Patterns", "📈 Metrics"])
+tab_main, tab_problems, tab_patterns, tab_metrics, tab_mock, tab_cheatsheet = st.tabs([
+    "🏠 Dashboard", 
+    "📚 Problems", 
+    "🧩 Patterns", 
+    "📈 Metrics",
+    "🥊 Mock Interview",
+    "💡 Cheat Sheet"
+])
 
 with tab_main:
     st.header("🏠 Main Dashboard")
@@ -360,6 +368,19 @@ with tab_main:
             st.success("Your Queue is empty! Great job!")
 
     with col_right:
+        # --- SRS Review Queue ---
+        srs_list = get_srs_queue(limit=5)
+        if srs_list:
+            st.subheader("🧠 SRS Review Due")
+            for prob in srs_list:
+                with st.container(border=True):
+                    due_date = datetime.strptime(prob['next_review_date'], "%Y-%m-%d %H:%M:%S")
+                    days_past = (datetime.now() - due_date).days
+                    st.markdown(f"**{prob['name']}**")
+                    time_label = "Today" if days_past <= 0 else f"{days_past} days overdue"
+                    st.caption(f"Stage {prob['review_stage']} | ⚠️ {time_label}")
+            st.divider()
+
         # --- Up Next ---
         st.subheader("🎯 Up Next")
         todo_list_short = get_todo_problems(limit=3)
@@ -427,8 +448,8 @@ with tab_problems:
         )
 
         # Editable table
-        display_cols = ["id", "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
-        editable_cols = ["name", "link", "topic", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+        display_cols = ["id", "name", "link", "difficulty", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
+        editable_cols = ["name", "link", "difficulty", "topic", "time_to_optimal", "bugs", "aha_moment", "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability", "checklist_status"]
 
         # Keep a snapshot of the original data for diffing
         original_df = problems_df[display_cols].copy()
@@ -437,6 +458,7 @@ with tab_problems:
             "id": st.column_config.NumberColumn("ID", disabled=True),
             "pattern": st.column_config.TextColumn("Patterns (linked)", disabled=True),
             "link": st.column_config.TextColumn("Link"),
+            "difficulty": st.column_config.SelectboxColumn("Diff (1-5)", options=[1, 2, 3, 4, 5]),
             "time_complexity": st.column_config.TextColumn("Time Complex"),
             "space_complexity": st.column_config.TextColumn("Space Complex"),
             "l4_code_quality": st.column_config.SelectboxColumn("Code Quality", options=["", "Needs Work", "Good", "Strong"]),
@@ -628,7 +650,11 @@ with tab_problems:
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    st.markdown(f"**Viewing:** {selected_sol['file_path'].split('/')[-1]}")
+                    header_str = f"**Viewing:** {selected_sol['file_path'].split('/')[-1]}"
+                    if 'time_spent_seconds' in selected_sol and pd.notna(selected_sol['time_spent_seconds']):
+                        ts = int(selected_sol['time_spent_seconds'])
+                        header_str += f" &nbsp;|&nbsp; ⏱️ **Time:** {ts//60}m {ts%60}s"
+                    st.markdown(header_str)
 
                     # Dynamically construct path using the current problem name slug
                     current_slug = sanitize_name(prof_row["name"])
@@ -745,14 +771,138 @@ with tab_patterns:
 with tab_metrics:
     # --- Analytics Header ---
     st.header("📈 Analytics")
-    total_cost, daily_df = load_analytics()
+    total_cost, _ = load_analytics()
 
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        st.metric(label="Total LLM Review Cost (All Time)", value=f"${total_cost:.4f}")
+    st.metric(label="Total LLM Review Cost (All Time)", value=f"${total_cost:.4f}")
+    
+    st.divider()
+    st.subheader("🟩 Daily Activity Heatmap")
+    
+    activity_data = get_daily_activity()
+    
+    # Generate continuous last 365 days backbone
+    end_date = pd.Timestamp.today().normalize()
+    start_date = end_date - pd.Timedelta(days=364)
+    all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
+    df_all = pd.DataFrame({'activity_date': all_dates})
+    
+    if activity_data:
+        df_activity = pd.DataFrame(activity_data)
+        df_activity['activity_date'] = pd.to_datetime(df_activity['activity_date'])
+        df_merged = pd.merge(df_all, df_activity, on='activity_date', how='left').fillna({'count': 0})
+    else:
+        df_merged = df_all.copy()
+        df_merged['count'] = 0.0
 
-    with col2:
-        if not daily_df.empty:
-            st.line_chart(daily_df, y="count", height=150, x_label="Date", y_label="Problems Solved")
-        else:
-            st.info("Solve a problem to see your activity chart!")
+    # Calculate continuous week columns for GitHub style grid
+    start_of_week = start_date - pd.Timedelta(days=start_date.dayofweek)
+    df_merged['week_col'] = ((df_merged['activity_date'] - start_of_week).dt.days // 7)
+    df_merged['day'] = df_merged['activity_date'].dt.day_name()
+    
+    # Sort days correctly (Mon-Sun)
+    day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    import altair as alt
+    heatmap = alt.Chart(df_merged).mark_rect(cornerRadius=2).encode(
+        x=alt.X('week_col:O', title='', axis=alt.Axis(labels=False, ticks=False), scale=alt.Scale(paddingInner=0.15)),
+        y=alt.Y('day:O', title='', sort=day_order, axis=alt.Axis(domain=False, ticks=False), scale=alt.Scale(paddingInner=0.15)),
+        color=alt.condition(
+            alt.datum.count == 0,
+            alt.value('rgba(128, 128, 128, 0.1)'), # Empty day color (adapts to light/dark themes via transparency)
+            alt.Color('count:Q', 
+                      title='Problems Solved',
+                      scale=alt.Scale(scheme='greens', domain=[1, max(5, df_merged['count'].max())]))
+        ),
+        tooltip=[
+            alt.Tooltip('activity_date:T', title='Date', format='%Y-%m-%d'),
+            alt.Tooltip('count:Q', title='Solved')
+        ]
+    ).properties(
+        width='container',
+        height=180
+    ).configure_view(
+        strokeWidth=0
+    )
+    
+    st.altair_chart(heatmap, use_container_width=True)
+
+with tab_mock:
+    st.header("🥊 Mock Interview")
+    st.markdown("Test your skills by solving 2 hidden random problems in 45 minutes. *No pattern tags allowed!*")
+    
+    if "mock_problems" not in st.session_state:
+        st.session_state.mock_problems = []
+    if "mock_start_time" not in st.session_state:
+        st.session_state.mock_start_time = None
+        
+    col_btn, col_timer, _ = st.columns([1, 1, 3])
+    with col_btn:
+        if st.button("🔄 Generate Interview", type="primary"):
+            st.session_state.mock_problems = get_mock_interview_problems()
+            st.session_state.mock_start_time = datetime.now()
+            st.rerun()
+            
+    with col_timer:
+        if st.session_state.mock_start_time:
+            # 45 minutes = 2700 seconds
+            elapsed = (datetime.now() - st.session_state.mock_start_time).total_seconds()
+            remaining = max(0, 2700 - elapsed)
+            mins = int(remaining // 60)
+            secs = int(remaining % 60)
+            
+            if remaining > 0:
+                st.markdown(f"### ⏳ {mins:02d}:{secs:02d}")
+            else:
+                st.markdown("### 🚨 **TIME UP!**")
+            
+    if st.session_state.mock_problems:
+        st.divider()
+        col1, col2 = st.columns(2)
+        
+        for i, prob in enumerate(st.session_state.mock_problems):
+            target_col = col1 if i == 0 else col2
+            with target_col:
+                with st.container(border=True):
+                    # Mask everything, just show name and link
+                    st.markdown(f"### Q{i+1}: {prob['name']}")
+                    
+                    # Display the problem.md statement if it exists
+                    from utils import sanitize_name
+                    prob_slug = sanitize_name(prob['name'])
+                    prob_file_path = os.path.join(DATA_DIR, "problems", prob_slug, "problem.md")
+                    
+                    if os.path.exists(prob_file_path):
+                        with st.expander("📝 Show Problem Statement"):
+                            with open(prob_file_path, "r", encoding="utf-8") as f:
+                                st.markdown(f.read())
+                    else:
+                        st.info("No local markdown provided. Click the link above.")
+    else:
+        st.info("Click the button above to start your mock interview.")
+
+with tab_cheatsheet:
+    st.header("💡 The 'Aha!' Cheat Sheet")
+    st.markdown("Your personalized 5-minute pre-interview warm-up page. Only showing problems where you explicitly logged 'Aha! Moments' or 'Bugs'.")
+    
+    cheat_data = get_cheat_sheet_data()
+    if cheat_data:
+        # Group by pattern
+        grouped_data = {}
+        for row in cheat_data:
+            pat_name = row['pattern_name'] or "Uncategorized"
+            if pat_name not in grouped_data:
+                grouped_data[pat_name] = []
+            grouped_data[pat_name].append(row)
+            
+        # Render
+        for pat_name, probs in grouped_data.items():
+            st.subheader(f"🧩 {pat_name}")
+            for p in probs:
+                with st.expander(f"**{p['problem_name']}**", expanded=True):
+                    if p['aha_moment']:
+                        st.markdown(f"💡 **Aha! Moment:** {p['aha_moment']}")
+                    if p['bugs']:
+                        st.markdown(f"🐛 **Bugs:** {p['bugs']}")
+            st.divider()
+    else:
+        st.info("No 'Aha!' moments or bugs logged yet! Run `dsa log` on your problems to populate this list.")

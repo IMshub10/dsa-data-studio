@@ -119,6 +119,24 @@ def init_db():
         except sqlite3.OperationalError:
             pass # Column already exists
 
+    # Phase 1: Add Spaced Repetition (SRS) columns to problems table
+    problem_columns = [
+        "difficulty INTEGER",
+        "review_stage INTEGER DEFAULT 0",
+        "next_review_date TIMESTAMP"
+    ]
+    for col in problem_columns:
+        try:
+            cursor.execute(f"ALTER TABLE problems ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+            
+    # Phase 2: Add timing column to solutions table
+    try:
+        cursor.execute("ALTER TABLE solutions ADD COLUMN time_spent_seconds INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
     print("Database initialized successfully.")
@@ -187,7 +205,7 @@ def add_feedback(solution_id: int, feedback_path: str):
 def update_problem_metadata(problem_id: int, metadata: dict):
     # Only update provided valid fields
     valid_fields = [
-        "name", "link", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status",
+        "name", "link", "difficulty", "topic", "pattern", "time_to_optimal", "bugs", "aha_moment", "checklist_status",
         "time_complexity", "space_complexity", "l4_code_quality", "l4_edge_cases", "l4_scalability"
     ]
     updates = []
@@ -397,6 +415,130 @@ def get_focus_pattern() -> dict:
         ''')
         row = cursor.fetchone()
     return dict(row) if row else None
+
+# --- Spaced Repetition (SRS) Helpers ---
+
+def update_srs_status(problem_id: int, difficulty: int):
+    """
+    Updates the Spaced Repetition schedule for a problem based on user-rated difficulty.
+    Difficulty scale: 1 (Easy) to 5 (Hard).
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # 1. Fetch current review stage
+        cursor.execute("SELECT review_stage FROM problems WHERE id = ?", (problem_id,))
+        row = cursor.fetchone()
+        
+        # If problem doesn't exist, exit safely
+        if not row:
+            return
+            
+        current_stage = row[0] if row[0] is not None else 0
+        
+        # 2. Algorithm Logic
+        if difficulty >= 4:
+            # Got it wrong or found it very hard -> Reset the interval
+            new_stage = 0
+            days_to_add = 1
+        elif difficulty == 3:
+            # Medium -> Keep the same stage but push it out slightly
+            new_stage = current_stage
+            days_to_add = 3 if current_stage == 0 else (current_stage * 2)
+        else:
+            # Easy/Perfect -> Advance stage, exponential interval
+            new_stage = current_stage + 1
+            # Base logic: stage 1=3d, stage 2=7d, stage 3=14d, stage 4=30d
+            intervals = [3, 7, 14, 30, 60, 120]
+            stage_idx = min(new_stage, len(intervals) - 1)
+            days_to_add = intervals[stage_idx]
+            
+        # 3. Apply Update
+        cursor.execute('''
+            UPDATE problems 
+            SET difficulty = ?,
+                review_stage = ?,
+                next_review_date = datetime('now', '+' || ? || ' days')
+            WHERE id = ?
+        ''', (difficulty, new_stage, days_to_add, problem_id))
+
+def get_srs_queue(limit: int = 5) -> list:
+    """Returns problems that are past their scheduled `next_review_date`."""
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM problems
+            WHERE next_review_date IS NOT NULL 
+              AND next_review_date <= datetime('now')
+            ORDER BY next_review_date ASC
+            LIMIT ?
+        ''', (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_mock_interview_problems() -> list:
+    """
+    Selects 2 random unsolved problems that belong to DISTINCT patterns.
+    This simulates a real interview where the user cannot guess the required approach.
+    """
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            WITH Unsolved AS (
+                SELECT p.*, pp.pattern_id
+                FROM problems p
+                LEFT JOIN solutions s ON p.id = s.problem_id
+                LEFT JOIN problem_patterns pp ON p.id = pp.problem_id
+                WHERE s.id IS NULL
+            ),
+            Randomized AS (
+                SELECT *, ROW_NUMBER() OVER(PARTITION BY pattern_id ORDER BY RANDOM()) as rn
+                FROM Unsolved
+            )
+            SELECT id, name, topic, time_to_optimal, bugs, aha_moment, checklist_status, created_at, difficulty, review_stage, next_review_date
+            FROM Randomized
+            WHERE rn = 1
+            ORDER BY RANDOM()
+            LIMIT 2
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_daily_activity() -> list:
+    """Returns a daily aggregation of solutions submitted over the last 365 days."""
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                date(submitted_at) as activity_date,
+                COUNT(id) as count
+            FROM solutions
+            WHERE submitted_at >= datetime('now', '-365 days')
+            GROUP BY date(submitted_at)
+            ORDER BY activity_date ASC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+def get_cheat_sheet_data() -> list:
+    """Returns problems that have 'Aha!' moments or recorded bugs, grouped by their primary pattern."""
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT 
+                p.name as problem_name,
+                p.bugs,
+                p.aha_moment,
+                pt.name as pattern_name
+            FROM problems p
+            LEFT JOIN problem_patterns pp ON p.id = pp.problem_id
+            LEFT JOIN patterns pt ON pp.pattern_id = pt.id
+            WHERE (p.bugs IS NOT NULL AND p.bugs != '') 
+               OR (p.aha_moment IS NOT NULL AND p.aha_moment != '')
+            ORDER BY pt.name ASC, p.name ASC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
 
 if __name__ == "__main__":
     init_db()

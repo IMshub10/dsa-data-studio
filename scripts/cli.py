@@ -14,7 +14,7 @@ from db import (
     init_db, create_problem, get_problem_by_name, add_solution, get_latest_solution, 
     add_feedback, update_problem_metadata, delete_problem_from_db, add_api_usage,
     insert_pattern, get_pattern_by_name, get_all_patterns, link_problem_to_pattern, get_problems_for_pattern,
-    get_analytics_by_pattern
+    get_analytics_by_pattern, update_srs_status
 )
 from llm.factory import get_llm_provider
 from utils import sanitize_name
@@ -85,6 +85,66 @@ def submit(problem_name: str, solution_file: str):
     solution_id = add_solution(problem["id"], dest_filename, language)
     typer.echo(f"Successfully submitted solution: {dest_path}")
     typer.echo(f"Logged to DB with Solution ID: {solution_id}")
+
+@app.command()
+def start(problem_name: str):
+    """Start the clock for a specific problem."""
+    safe_name = sanitize_name(problem_name)
+    problem = get_problem_by_name(safe_name)
+    if not problem:
+        typer.echo(f"Problem '{problem_name}' not found. Run 'dsa new' first.")
+        return
+        
+    problem_dir = os.path.join(PROBLEMS_DIR, safe_name)
+    session_file = os.path.join(problem_dir, ".session")
+    
+    with open(session_file, "w") as f:
+        f.write(str(int(datetime.now().timestamp())))
+        
+    typer.echo(f"⏱️  Timer started for '{problem_name}'. Good luck!")
+    typer.echo(f"   When finished, submit your code and run: dsa stop \"{problem_name}\"")
+
+@app.command()
+def stop(problem_name: str):
+    """Stop the clock and attach the elapsed time to your latest solution."""
+    safe_name = sanitize_name(problem_name)
+    problem = get_problem_by_name(safe_name)
+    if not problem:
+        typer.echo(f"Problem '{problem_name}' not found.")
+        return
+        
+    problem_dir = os.path.join(PROBLEMS_DIR, safe_name)
+    session_file = os.path.join(problem_dir, ".session")
+    
+    if not os.path.exists(session_file):
+        typer.echo("❌ No active timer found! Did you run 'dsa start'?")
+        return
+        
+    with open(session_file, "r") as f:
+        start_ts = int(f.read().strip())
+        
+    end_ts = int(datetime.now().timestamp())
+    elapsed_seconds = end_ts - start_ts
+    
+    # Needs a DB helper to attach this to the *latest* solution
+    latest_sol = get_latest_solution(problem["id"])
+    if not latest_sol:
+        typer.echo("❌ No solutions found! Please 'dsa submit' your code before stopping the timer.")
+        return
+        
+    # We update the DB natively here
+    from db import get_connection
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE solutions SET time_spent_seconds = ? WHERE id = ?", (elapsed_seconds, latest_sol["id"]))
+        conn.commit()
+        
+    os.remove(session_file)
+    
+    mins = elapsed_seconds // 60
+    secs = elapsed_seconds % 60
+    typer.echo(f"🛑 Timer stopped for '{problem_name}'.")
+    typer.echo(f"   Time spent: {mins}m {secs}s logged to latest solution.")
 
 @app.command()
 def review(problem_name: str):
@@ -182,6 +242,15 @@ def log(problem_name: str):
     aha_moment = typer.prompt("Aha! moment", default="", show_default=False)
     checklist_status = typer.prompt("Checklist Status (Todo, In Progress, Done)", default="Done")
     
+    # SRS Difficulty
+    difficulty_str = typer.prompt("🌟 Difficulty Rating (1=Easy to 5=Hard)", default="3")
+    try:
+        diff_val = int(difficulty_str)
+        if diff_val < 1 or diff_val > 5:
+            diff_val = 3
+    except ValueError:
+        diff_val = 3
+    
     metadata = {
         "topic": topic,
         "pattern": pattern,
@@ -192,7 +261,8 @@ def log(problem_name: str):
     }
     
     update_problem_metadata(problem["id"], metadata)
-    typer.echo("Metadata updated successfully.")
+    update_srs_status(problem["id"], diff_val)
+    typer.echo("Metadata and SRS Schedule updated successfully.")
     
     # Prompt for linking to a global DSA pattern (numbered selection)
     all_pats = get_all_patterns()

@@ -1,8 +1,8 @@
 # DSA Data Studio
 
-DSA Data Studio is a local CLI tool and web dashboard designed to help you track your LeetCode problem-solving progress. It allows you to save incremental solutions, log performance metadata in a SQLite database, and get automated L4/L5 standard code reviews and optimal solutions from your LLM of choice. 
+DSA Data Studio is a local CLI tool and web dashboard designed to be your ultimate technical interview prep companion. It enforces disciplined problem-solving by tracking your time, managing a Spaced Repetition (SRS) queue, automatically reviewing your code with LLMs, and simulating Mock Interviews.
 
-The application features an adaptive dashboard UI including **Current Focus tracking**, API cost metrics, historical submission viewing, structured **Problem Queues**, and a dedicated DSA Patterns library.
+The application features a beautifully adaptive Streamlit UI that includes **Focus tracking**, **Activity Heatmaps**, **Spaced Repetition due queues**, historical code iteration, and a powerful **"Aha! Moment" Cheat Sheet** to read right before your interview.
 
 
 ## How does the UI look
@@ -69,6 +69,44 @@ The application features an adaptive dashboard UI including **Current Focus trac
 
 ---
 
+## 🌱 First Time Setup (How to add your first problem)
+
+If you have a completely empty database, here's how to get your first problem set up in the system before you solve it:
+
+1. **Add a Pattern:** Create a logical bucket for the problem (e.g., Two Pointers, Dynamic Programming).
+   ```bash
+   ./dsa pattern "Sliding Window" --add
+   ```
+2. **Create the Problem:** Create the local directory and database record.
+   ```bash
+   ./dsa new "Max Consecutive Ones III" --link "https://leetcode.com/problems/..."
+   ```
+3. **Link them together:** Attach the problem to the pattern you just created.
+   ```bash
+   ./dsa pattern "Sliding Window" --link "Max Consecutive Ones III"
+   ```
+4. Now you are ready to start coding! Follow the daily workflow below.
+
+---
+
+## 🚀 Recommended Daily Workflow
+
+To get the most out of the Studio's automated features, follow this loop when you sit down to practice:
+
+1. **Check the Dashboard:** Open `localhost:8501`. Look at your **🎯 Current Focus** widget and check if you have any overdue problems in your **🧠 SRS Review Queue**.
+2. **Start a Target:** If the SRS queue is empty, grab a problem from your **Up Next** list.
+3. **Start the Timer:** Before writing code, run `./dsa start "Problem Name"`. This starts a local Pomodoro session to keep you honest.
+4. **Solve & Review:** Write your solution in your editor, then run `./dsa submit "Problem Name" path/to/code.py`. 
+5. **Get Feedback:** Immediately run `./dsa review "Problem Name"` to have your configured LLM critique your code. Read the generated markdown feedback.
+6. **Stop the Clock:** Run `./dsa stop "Problem Name"` to end the timer and lock in your "time spent" metric.
+7. **Log Metadata:** Run `./dsa log "Problem Name"`. Ensure you assign a **Difficulty Rating (1-5)** (this calculates the next time it appears in your SRS queue!), write down any **Aha! moments**, and link it to the correct **Pattern**.
+
+### Preparing for an Interview?
+- Switch to the **🥊 Mock Interview** tab and click `Generate`. It will enforce a 45-minute countdown clock and pull 2 random problems from completely different pattern buckets (and hide their tags!) to simulate real pressure.
+- The morning of your interview, open the **💡 Cheat Sheet** tab. This hyper-condensed view skips all the code and only displays the "Bugs" and "Aha! Moments" you've ever logged, grouped natively by pattern.
+
+---
+
 ## 🛠️ CLI Commands
 
 You can run these commands from anywhere inside the project directory using the provided `./dsa` executable script.
@@ -85,20 +123,28 @@ Creates a new directory for the problem, stubs out a `problem.md` file for you t
 ./dsa new "Problem Name" --link "https://leetcode.com/problems/..."
 ```
 
-### 3. Submit a Solution
+### 3. Track your Time (Pomodoro)
+Before starting to code, initiate the tracking session. When finished, stop it to automatically log your time to the database.
+```bash
+./dsa start "Problem Name"
+# ... write your code ...
+./dsa stop "Problem Name"
+```
+
+### 4. Submit a Solution
 Copies your local Java/Python solution into the problem's tracking folder, timestamps it, and logs it to the database.
 ```bash
 ./dsa submit "Problem Name" path/to/your/Solution.java
 ```
 
-### 4. Get LLM Feedback
+### 5. Get LLM Feedback
 Reads your latest submitted solution and the problem description, sends it to your configured LLM provider, and saves the generated Markdown feedback (Time/Space complexity, bugs, optimal approach).
 ```bash
 ./dsa review "Problem Name"
 ```
 
-### 5. Log Metadata
-Opens an interactive prompt to retroactively log metadata for the problem (Topic, Pattern, Time to Optimal, Bugs, Aha! moments). This data populates the Streamlit dashboard.
+### 6. Log Metadata (SRS & Aha Moments)
+Opens an interactive prompt to retroactively log metadata for the problem. You will be prompted to rate the **Difficulty (1-5)** which updates the Spaced Repetition System. Logging "Aha! Moments" here will pipe them into your pre-interview Cheat Sheet tab.
 ```bash
 ./dsa log "Problem Name"
 ```
